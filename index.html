@@ -114,6 +114,9 @@
             font-size: 0.8rem;
             color: #ffffff;
         }
+        #levelDisplay .level-value {
+            font-weight: bold;
+        }
         #controlButton {
             padding: 0.5rem 1rem;
             font-size: 0.8rem;
@@ -129,15 +132,18 @@
         #controlButton:hover {
             background-color: #29f8dc;
         }
-        #autoButton {
+        #autoButton, #speedButton, #autoStopButton {
             padding: 0.5rem 1rem;
             font-size: 0.8rem;
             cursor: pointer;
             border-radius: 5px;
-            background-color: #424242;
-            color: #eeeeee;
             border: none;
             transition: background-color 0.3s ease;
+            height: 40px;
+        }
+        #autoButton {
+            background-color: #424242;
+            color: #eeeeee;
         }
         #autoButton:hover {
             background-color: #616161;
@@ -146,10 +152,51 @@
             background-color: #ffb74d;
             color: #121212;
         }
+        #speedButton {
+            background-color: #826509;
+            color: #ffffff;
+        }
+        #speedButton:hover {
+            background-color: #b58e0d;
+        }
+        #autoStopButton {
+            display: grid;
+            grid-template-columns: repeat(3, 8px);
+            grid-template-rows: repeat(3, 8px);
+            gap: 2px;
+            padding: 7px;
+            background-color: #424242;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        .stop-cell {
+            width: 8px;
+            height: 8px;
+        }
+        #autoStopButton.state-unstop .stop-cell { background-color: white; }
+        #autoStopButton.state-unstop .stop-cell:nth-child(5) { background-color: #42a5f5; }
+        #autoStopButton.state-around .stop-cell { background-color: #ef5350; }
+        #autoStopButton.state-around .stop-cell:nth-child(5) { background-color: #42a5f5; }
+        #autoStopButton.state-adjacent .stop-cell { background-color: white; }
+        #autoStopButton.state-adjacent .stop-cell:nth-child(2),
+        #autoStopButton.state-adjacent .stop-cell:nth-child(4),
+        #autoStopButton.state-adjacent .stop-cell:nth-child(6),
+        #autoStopButton.state-adjacent .stop-cell:nth-child(8) { background-color: #ef5350; }
+        #autoStopButton.state-adjacent .stop-cell:nth-child(5) { background-color: #42a5f5; }
+
         #specialActionsArea {
             display: flex;
-            gap: 10px;
+            gap: 20px;
             margin-bottom: 1rem;
+            align-items: center;
+        }
+        .special-action {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
         }
         #specialActionsArea button {
             padding: 0.5rem 1rem;
@@ -162,11 +209,21 @@
             transition: background-color 0.3s ease;
             font-family: 'Press Start 2P', cursive;
         }
-        #specialActionsArea button:hover {
+        #specialActionsArea button:hover:not(:disabled) {
             background-color: #8e24aa;
+        }
+        #specialActionsArea button:disabled {
+            background-color: #4a4a4a;
+            cursor: not-allowed;
+            color: #888888;
         }
         #specialActionsArea button#bonusButton.active {
             background-color: #42a5f5;
+        }
+        .counter-span {
+            font-size: 0.8rem;
+            color: #ffd700;
+            font-family: 'Press Start 2P', cursive;
         }
         #gameOverPanel {
             position: fixed;
@@ -357,12 +414,14 @@
             #controlButton { font-size: 0.8rem; padding: 0.5rem; width: 10rem; }
             #gameOverPanel { padding: 0.5rem; font-size: 0.8rem; }
             #levelDisplay { font-size: 0.6rem; }
-            #autoButton { font-size: 0.7rem; padding: 0.5rem; }
+            #autoButton, #speedButton, #autoStopButton { font-size: 0.7rem; padding: 0.5rem; }
             .game-controls button { font-size: 0.7rem; padding: 0.5rem; }
+            #specialActionsArea { gap: 10px; }
             #specialActionsArea button {
                 font-size: 0.6rem;
                 padding: 0.4rem 0.8rem;
             }
+            .counter-span { font-size: 0.7rem; }
         }
     </style>
 </head>
@@ -376,17 +435,32 @@
     <div id="controlArea">
         <button id="controlButton">味方配置</button>
         <button id="autoButton">オート</button>
+        <button id="autoStopButton">
+            <div class="stop-cell"></div><div class="stop-cell"></div><div class="stop-cell"></div>
+            <div class="stop-cell"></div><div class="stop-cell"></div><div class="stop-cell"></div>
+            <div class="stop-cell"></div><div class="stop-cell"></div><div class="stop-cell"></div>
+        </button>
+        <button id="speedButton">Speed x1</button>
     </div>
 
     <div id="specialActionsArea">
-        <button id="shuffleButton">Shuffle</button>
-        <button id="downButton">Down</button>
-        <button id="bonusButton">Bonus</button>
+        <div class="special-action">
+            <button id="shuffleButton">Shuffle</button>
+            <span id="shuffleCounter" class="counter-span">(0)</span>
+        </div>
+        <div class="special-action">
+            <button id="downButton">Down</button>
+            <span id="downCounter" class="counter-span">(0)</span>
+        </div>
+        <div class="special-action">
+            <button id="bonusButton">Bonus</button>
+            <span id="bonusCounter" class="counter-span">(0)</span>
+        </div>
     </div>
 
     <div id="levelDisplay" style="text-align: center; margin-bottom: 1rem;">
-        <div>現在の最大レベル: <span id="currentMaxLevel">0</span></div>
-        <div>これまでの最大レベル: <span id="overallMaxLevel">0</span></div>
+        <div>CurrentMaxLv: <span id="currentMaxLevel" class="level-value">0</span></div>
+        <div>OverAllMaxLv: <span id="overallMaxLevel" class="level-value">0</span></div>
     </div>
 
     <div id="gameOverPanel">
@@ -436,10 +510,12 @@
         const gameBoard = document.getElementById('gameBoard');
         const controlButton = document.getElementById('controlButton');
         const autoButton = document.getElementById('autoButton');
+        const speedButton = document.getElementById('speedButton');
+        const autoStopButton = document.getElementById('autoStopButton');
         const gameOverPanel = document.getElementById('gameOverPanel');
         const resetButton = document.getElementById('resetButton');
-        const currentMaxLevelDisplay = document.getElementById('currentMaxLevel');
-        const overallMaxLevelDisplay = document.getElementById('overallMaxLevel');
+        const currentMaxLevelSpan = document.getElementById('currentMaxLevel');
+        const overallMaxLevelSpan = document.getElementById('overallMaxLevel');
         const resetGameButton = document.getElementById('resetGameButton');
         
         const settingsButton = document.getElementById('settingsButton');
@@ -453,6 +529,9 @@
         const shuffleButton = document.getElementById('shuffleButton');
         const downButton = document.getElementById('downButton');
         const bonusButton = document.getElementById('bonusButton');
+        const shuffleCounterSpan = document.getElementById('shuffleCounter');
+        const downCounterSpan = document.getElementById('downCounter');
+        const bonusCounterSpan = document.getElementById('bonusCounter');
 
         const boardPatterns = [
             [[1, 1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 1, 1, 1], [1, 0, 0, 0, 0, 1, 1], [1, 0, 0, 0, 0, 0, 1], [1, 1, 0, 0, 0, 0, 1], [1, 1, 1, 0, 0, 0, 1], [1, 1, 1, 1, 1, 1, 1]],
@@ -472,9 +551,25 @@
         let gameClear = false;
         let endlessMode = false;
         let effectState = 1;
-        let bonusMode = false; // ★ボーナスモード用の変数
-        let bonusMoveCounter = 0; // ★ボーナスモードの移動回数カウンター
+        let bonusMode = false;
+        let bonusMoveCounter = 0;
+
+        let shuffleCounter = 0;
+        let downCounter = 0;
+        let bonusCounter = 0;
+        let allyPlacementCount = 0;
+        let consecutiveEvolutionTurns = 0;
         
+        const autoSpeeds = [
+            { label: 'x1', interval: 1000 / 12 },
+            { label: 'x2', interval: 1000 / 24 },
+            { label: 'x4', interval: 1000 / 48 }
+        ];
+        let currentSpeedIndex = 0;
+        
+        const autoStopModes = ['unstop', 'around', 'adjacent'];
+        let currentAutoStopIndex = 0;
+
         let tempPattern = 0;
         let tempEndlessMode = false;
         let tempEffectState = 1;
@@ -487,6 +582,17 @@
             { row: 0, col: -1, dir: 'left' }, { row: 0, col: 1, dir: 'right' }
         ];
 
+        function updateCountersDisplay() {
+            shuffleCounterSpan.textContent = `(${shuffleCounter})`;
+            shuffleButton.disabled = shuffleCounter <= 0;
+
+            downCounterSpan.textContent = `(${downCounter})`;
+            downButton.disabled = downCounter <= 0;
+
+            bonusCounterSpan.textContent = `(${bonusCounter})`;
+            bonusButton.disabled = bonusCounter <= 0 && !bonusButton.classList.contains('active');
+        }
+
         function initGame() {
             gameOver = false;
             gameClear = false;
@@ -495,6 +601,7 @@
             allies = [];
             enemies = [];
             phase = 0;
+            overallMaxLevel = 0;
             controlButton.textContent = '味方配置';
             controlButton.disabled = false;
             autoButton.disabled = false;
@@ -506,9 +613,23 @@
             autoButton.classList.remove('active');
             autoButton.textContent = 'オート';
             
-            bonusMode = false; // ゲームリセット時にボーナスモードをオフに
+            bonusMode = false;
             bonusButton.classList.remove('active');
-            bonusMoveCounter = 0; // ★カウンターをリセット
+            bonusMoveCounter = 0;
+
+            shuffleCounter = 0;
+            downCounter = 0;
+            bonusCounter = 0;
+            allyPlacementCount = 0;
+            consecutiveEvolutionTurns = 0;
+            updateCountersDisplay();
+
+            currentSpeedIndex = 0;
+            speedButton.textContent = `Speed ${autoSpeeds[currentSpeedIndex].label}`;
+
+            autoStopButton.classList.remove(`state-${autoStopModes[currentAutoStopIndex]}`);
+            currentAutoStopIndex = 0;
+            autoStopButton.classList.add(`state-${autoStopModes[currentAutoStopIndex]}`);
 
             newlyPlacedAllies = [];
             evolutionCount = 0;
@@ -618,6 +739,7 @@
                 newlyPlacedAllies = [firstAlly];
             }
             updateBoard();
+            updateLevelDisplay();
         }
 
         function decideNextEnemyMove(enemy) {
@@ -678,17 +800,35 @@
         function handleButtonClick() {
             if (gameOver || (gameClear && !endlessMode)) return;
 
-            // ★ボーナスモードの自動解除チェック
             if (phase === 0 && bonusMode && bonusMoveCounter >= 5) {
                 bonusMode = false;
                 bonusButton.classList.remove('active');
                 bonusMoveCounter = 0;
+                updateCountersDisplay();
             }
 
             switch (phase) {
-                case 0: placeAlly(); phase = 1; controlButton.textContent = '敵移動'; break;
-                case 1: moveEnemies(); phase = 2; controlButton.textContent = '味方移動'; break;
-                case 2: moveAllies(); phase = 0; controlButton.textContent = '味方配置'; break;
+                case 0:
+                    placeAlly();
+                    phase = 1;
+                    controlButton.textContent = '敵移動';
+
+                    allyPlacementCount++;
+                    if (allyPlacementCount > 0 && allyPlacementCount % 30 === 0) {
+                        shuffleCounter++;
+                        updateCountersDisplay();
+                    }
+                    break;
+                case 1:
+                    moveEnemies();
+                    phase = 2;
+                    controlButton.textContent = '味方移動';
+                    break;
+                case 2:
+                    moveAllies();
+                    phase = 0;
+                    controlButton.textContent = '味方配置';
+                    break;
             }
             updateBoard();
         }
@@ -710,9 +850,7 @@
             updateLevelDisplay();
         }
 
-        // ★ボーナスモードの計算式を組み込んだ味方移動ロジック
         function moveAllies() {
-            // ★ボーナスモード中の移動回数をカウント
             if (bonusMode) {
                 bonusMoveCounter++;
             }
@@ -743,7 +881,7 @@
                 const group = destinations[key];
                 const [destRow, destCol] = key.split('-').map(Number);
 
-                if (group.length > 1) { // 進化が発生
+                if (group.length > 1) { 
                     const sumOfLevels = group.reduce((sum, ally) => sum + ally.level, 0);
                     const initialMaxLevel = group.reduce((max, ally) => Math.max(max, ally.level), 0);
                     let finalLevel;
@@ -766,7 +904,7 @@
 
                     newAllies.push({ row: destRow, col: destCol, level: finalLevel });
 
-                } else { // 進化なし（単独での移動）
+                } else { 
                     const ally = group[0];
                     newAllies.push({ row: destRow, col: destCol, level: ally.level });
                 }
@@ -774,6 +912,18 @@
 
             allies = newAllies;
             evolutionCount += evolutionsThisTurn;
+
+            // Bonus counter logic
+            if (evolutionsThisTurn > 0) {
+                consecutiveEvolutionTurns++;
+                if (consecutiveEvolutionTurns >= 5) {
+                    bonusCounter++;
+                    consecutiveEvolutionTurns = 0;
+                    updateCountersDisplay();
+                }
+            } else {
+                consecutiveEvolutionTurns = 0;
+            }
 
             if (allies.some(ally => ally.level >= 1000) && !endlessMode) {
                 gameClear = true;
@@ -789,10 +939,6 @@
         }
 
         function updateBoard() {
-            const levelDisplay = document.getElementById('levelDisplay');
-            const currentMaxLevelSpan = levelDisplay.querySelector('#currentMaxLevel');
-            const overallMaxLevelSpan = levelDisplay.querySelector('#overallMaxLevel');
-
             let maxLevel = allies.reduce((max, ally) => Math.max(max, ally.level), 0);
             for (let i = 0; i < board.length; i++) {
                 for (let j = 0; j < board[i].length; j++) {
@@ -834,30 +980,91 @@
         function updateLevelDisplay() {
             const currentMax = allies.length > 0 ? allies.reduce((max, ally) => Math.max(max, ally.level), 0) : 0;
             
-            const levelDisplay = document.getElementById('levelDisplay');
-            const currentMaxLevelSpan = levelDisplay.querySelector('#currentMaxLevel');
-            const overallMaxLevelSpan = levelDisplay.querySelector('#overallMaxLevel');
+            const getColorForLevel = (level) => {
+                if (level >= 1000) return '#42a5f5'; // blue
+                if (level >= 500) return '#ef5350'; // red
+                if (level >= 100) return '#81c784'; // green
+                return '#ffffff'; // white
+            };
 
             currentMaxLevelSpan.textContent = currentMax;
+            currentMaxLevelSpan.style.color = getColorForLevel(currentMax);
+
+            // === NEW Down counter logic ===
+            const oldOverallMaxLevel = overallMaxLevel;
             overallMaxLevel = Math.max(overallMaxLevel, currentMax);
+            
+            const previousMilestone = Math.floor(oldOverallMaxLevel / 10);
+            const currentMilestone = Math.floor(overallMaxLevel / 10);
+
+            if (currentMilestone > previousMilestone) {
+                const increaseAmount = currentMilestone - previousMilestone;
+                downCounter += increaseAmount;
+                updateCountersDisplay();
+            }
+            // === End of new logic ===
+
             overallMaxLevelSpan.textContent = overallMaxLevel;
+            overallMaxLevelSpan.style.color = getColorForLevel(overallMaxLevel);
         }
 
         function getCurrentMaxLevel() {
             return allies.length > 0 ? allies.reduce((max, ally) => Math.max(max, ally.level), 0) : 0;
         }
 
+        function checkAutoStopCondition() {
+            const mode = autoStopModes[currentAutoStopIndex];
+            if (mode === 'unstop' || allies.length === 0) {
+                return false; 
+            }
+            const eligibleAllies = allies.filter(ally => ally.level >= 50);
+            if (eligibleAllies.length === 0) {
+                return false;
+            }
+            const maxLevelAlly = eligibleAllies.reduce((prev, current) => (prev.level > current.level) ? prev : current);
+            
+            const aroundChecks = [
+                {r: -1, c: -1}, {r: -1, c: 0}, {r: -1, c: 1},
+                {r: 0, c: -1},              {r: 0, c: 1},
+                {r: 1, c: -1}, {r: 1, c: 0}, {r: 1, c: 1}
+            ];
+            const adjacentChecks = [
+                {r: -1, c: 0}, {r: 0, c: -1}, {r: 0, c: 1}, {r: 1, c: 0}
+            ];
+
+            const checks = (mode === 'around') ? aroundChecks : adjacentChecks;
+
+            for (const check of checks) {
+                const checkRow = maxLevelAlly.row + check.r;
+                const checkCol = maxLevelAlly.col + check.c;
+
+                if (enemies.some(e => e.row === checkRow && e.col === checkCol)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         function toggleAutoMode() {
             autoMode = !autoMode;
             autoButton.classList.toggle('active', autoMode);
             if (autoMode) {
-                autoIntervalId = setInterval(handleButtonClick, 1000 / 12);
+                const autoPlay = () => {
+                    if (checkAutoStopCondition()) {
+                        clearInterval(autoIntervalId);
+                        autoMode = false;
+                        autoButton.classList.remove('active');
+                        return;
+                    }
+                    handleButtonClick();
+                };
+                autoIntervalId = setInterval(autoPlay, autoSpeeds[currentSpeedIndex].interval);
             } else {
                 clearInterval(autoIntervalId);
             }
         }
         
-        // ★ シャッフル機能の実装
         function shuffleArray(array) {
             for (let i = array.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
@@ -901,9 +1108,9 @@
 
             newlyPlacedAllies = [];
             updateBoard();
+            updateLevelDisplay();
         }
 
-        // ★ Downボタン機能の実装
         function consolidateAlliesVertically() {
             if (gameOver || (gameClear && !endlessMode)) return;
 
@@ -913,7 +1120,6 @@
                 hasEnemy: false
             }));
 
-            // 各縦の列に存在する味方のレベルを合計し、敵の存在を確認
             for (let j = 0; j < numCols; j++) {
                 if (enemies.some(e => e.col === j)) {
                     columnData[j].hasEnemy = true;
@@ -926,17 +1132,14 @@
 
             const newAllies = [];
             for (let j = 0; j < numCols; j++) {
-                // その列に敵が含まれていない場合のみ処理
                 if (columnData[j].totalLevel > 0 && !columnData[j].hasEnemy) {
                     let targetRow = -1;
-                    // 各縦の列の最も下段（壁のマスを除く）を探す
                     for (let i = board.length - 1; i >= 0; i--) {
                         if (board[i][j] !== 1) {
                             targetRow = i;
                             break;
                         }
                     }
-                    // 新しい味方を配置
                     if (targetRow !== -1) {
                         newAllies.push({
                             row: targetRow,
@@ -947,34 +1150,69 @@
                 }
             }
 
-            // 既存の味方を消して、新しい味方リストに更新
             allies = newAllies;
-            newlyPlacedAllies = []; // 新規配置アニメーションは不要
+            newlyPlacedAllies = [];
 
             updateBoard();
             updateLevelDisplay();
         }
 
-
-
         controlButton.addEventListener('click', handleButtonClick);
         autoButton.addEventListener('click', toggleAutoMode);
         
+        speedButton.addEventListener('click', () => {
+            currentSpeedIndex = (currentSpeedIndex + 1) % autoSpeeds.length;
+            speedButton.textContent = `Speed ${autoSpeeds[currentSpeedIndex].label}`;
+            if (autoMode) {
+                clearInterval(autoIntervalId);
+                const autoPlay = () => {
+                    if (checkAutoStopCondition()) {
+                        clearInterval(autoIntervalId);
+                        autoMode = false;
+                        autoButton.classList.remove('active');
+                        return;
+                    }
+                    handleButtonClick();
+                };
+                autoIntervalId = setInterval(autoPlay, autoSpeeds[currentSpeedIndex].interval);
+            }
+        });
+
+        autoStopButton.addEventListener('click', () => {
+            autoStopButton.classList.remove(`state-${autoStopModes[currentAutoStopIndex]}`);
+            currentAutoStopIndex = (currentAutoStopIndex + 1) % autoStopModes.length;
+            autoStopButton.classList.add(`state-${autoStopModes[currentAutoStopIndex]}`);
+        });
+
         shuffleButton.addEventListener('click', () => {
-            shufflePositions();
+            if (shuffleCounter > 0) {
+                shuffleCounter--;
+                updateCountersDisplay();
+                shufflePositions();
+            }
         });
 
         downButton.addEventListener('click', () => {
-            consolidateAlliesVertically();
+            if (downCounter > 0) {
+                downCounter--;
+                updateCountersDisplay();
+                consolidateAlliesVertically();
+            }
         });
 
         bonusButton.addEventListener('click', () => {
-            bonusMode = !bonusMode;
-            bonusButton.classList.toggle('active', bonusMode);
-            // ★ボーナスモード開始時にカウンターをリセット
-            if (bonusMode) {
-                bonusMoveCounter = 0;
+            if (!bonusMode) { // Activate Bonus
+                if (bonusCounter > 0) {
+                    bonusCounter--;
+                    bonusMode = true;
+                    bonusButton.classList.add('active');
+                    bonusMoveCounter = 0;
+                }
+            } else { // Deactivate Bonus
+                bonusMode = false;
+                bonusButton.classList.remove('active');
             }
+            updateCountersDisplay();
         });
 
         initGame();
