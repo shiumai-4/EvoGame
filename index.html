@@ -103,6 +103,12 @@
             border-radius: 50%;
             background-color: yellow;
         }
+        /* ▼▼▼ CSS追加 ▼▼▼ */
+        #mainButtonContainer {
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+        /* ▲▲▲ CSS追加 ▲▲▲ */
         #controlArea {
             display: flex;
             align-items: center;
@@ -111,8 +117,13 @@
             margin-bottom: 0.5rem;
         }
         #levelDisplay {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
             font-size: 0.8rem;
             color: #ffffff;
+            text-align: center;
+            margin-bottom: 1rem;
         }
         #levelDisplay .level-value {
             font-weight: bold;
@@ -324,6 +335,35 @@
             gap: 10px;
             justify-content: center;
         }
+        #modalPatternPreview {
+            display: grid;
+            grid-template-columns: repeat(7, 25px);
+            grid-template-rows: repeat(7, 25px);
+            gap: 2px;
+            margin: 10px auto 0;
+            border: 1px solid #424242;
+            padding: 3px;
+            border-radius: 3px;
+            background-color: #212121;
+            width: fit-content;
+        }
+        .preview-square {
+            width: 25px;
+            height: 25px;
+            background-color: #303030;
+            border: 1px solid #616161;
+            border-radius: 2px;
+        }
+        .preview-square.wall {
+            background-color: #757575;
+        }
+        .enemy-indicator {
+            width: 12px;
+            height: 12px;
+            background-color: #ef5350;
+            border: 1px solid #c62828;
+            border-radius: 2px;
+        }
         #modalPatternSelect button {
             padding: 0.5rem 1rem;
             font-size: 0.7rem;
@@ -338,18 +378,25 @@
             background-color: #81c784;
             color: #121212;
         }
-        #modalModeSelect {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
-        #modalModeSelect button {
+        #modalEndlessButton, #modalEffectButton {
             padding: 0.5rem 1rem;
             font-size: 0.7rem;
             cursor: pointer;
             border-radius: 5px;
             border: none;
             transition: background-color 0.3s ease;
+        }
+        .modal-dual-section {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-start;
+            width: 100%;
+        }
+        .modal-sub-section {
+            text-align: center;
+        }
+        .modal-sub-section h3 {
+            margin-bottom: 0.8rem;
         }
         #modalEndlessButton {
             background-color: #424242;
@@ -413,7 +460,7 @@
             h1 { font-size: 1.2rem; }
             #controlButton { font-size: 0.8rem; padding: 0.5rem; width: 10rem; }
             #gameOverPanel { padding: 0.5rem; font-size: 0.8rem; }
-            #levelDisplay { font-size: 0.6rem; }
+            #levelDisplay { font-size: 0.6rem; flex-direction: column; gap: 5px; }
             #autoButton, #speedButton, #autoStopButton { font-size: 0.7rem; padding: 0.5rem; }
             .game-controls button { font-size: 0.7rem; padding: 0.5rem; }
             #specialActionsArea { gap: 10px; }
@@ -431,9 +478,18 @@
         <button id="settingsButton">設定</button>
         <button id="resetGameButton">Reset</button>
     </div>
+
+    <div id="scoreDisplay" style="margin-bottom: 0.5rem; font-size: 1rem; color: #ffeb3b; font-family: 'Press Start 2P', cursive;">
+        Score: <span id="scoreValue">0</span>
+    </div>
+
     <div id="gameBoard"></div>
-    <div id="controlArea">
+
+    <div id="mainButtonContainer">
         <button id="controlButton">味方配置</button>
+    </div>
+
+    <div id="controlArea">
         <button id="autoButton">オート</button>
         <button id="autoStopButton">
             <div class="stop-cell"></div><div class="stop-cell"></div><div class="stop-cell"></div>
@@ -442,7 +498,6 @@
         </button>
         <button id="speedButton">Speed x1</button>
     </div>
-
     <div id="specialActionsArea">
         <div class="special-action">
             <button id="shuffleButton">Shuffle</button>
@@ -458,9 +513,10 @@
         </div>
     </div>
 
-    <div id="levelDisplay" style="text-align: center; margin-bottom: 1rem;">
+    <div id="levelDisplay">
         <div>CurrentMaxLv: <span id="currentMaxLevel" class="level-value">0</span></div>
         <div>OverAllMaxLv: <span id="overallMaxLevel" class="level-value">0</span></div>
+        <div>Turn: <span id="turnCounter" class="level-value">0</span></div>
     </div>
 
     <div id="gameOverPanel">
@@ -489,14 +545,24 @@
                     <button data-pattern="2">パターン2</button>
                     <button data-pattern="3">パターン3</button>
                 </div>
-            </div>
-
-            <div>
-                <h3>モード・難易度</h3>
-                <div id="modalModeSelect">
-                    <button id="modalEndlessButton">Endless</button>
-                    <button id="modalEffectButton" class="state-1">E1</button>
+                <div id="modalPatternPreview"></div>
                 </div>
+
+            <div class="modal-dual-section">
+                <div class="modal-sub-section">
+                    <h3>モード</h3>
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                        <button id="modalEndlessButton">Endless</button>
+                        <span id="endlessModeDisplay" style="font-family: 'Press Start 2P', cursive; color: #ffeb3b; width: 60px; text-align: left;"></span>
+                    </div>
+                    </div>
+                <div class="modal-sub-section">
+                    <h3>難易度</h3>
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                        <button id="modalEffectButton" class="state-1">E1</button>
+                        <div id="enemyCountDisplay" style="display: flex; gap: 3px; height: 14px;"></div>
+                    </div>
+                    </div>
             </div>
 
             <div class="modal-footer">
@@ -516,6 +582,8 @@
         const resetButton = document.getElementById('resetButton');
         const currentMaxLevelSpan = document.getElementById('currentMaxLevel');
         const overallMaxLevelSpan = document.getElementById('overallMaxLevel');
+        const turnCounterSpan = document.getElementById('turnCounter');
+        const scoreValueSpan = document.getElementById('scoreValue');
         const resetGameButton = document.getElementById('resetGameButton');
         
         const settingsButton = document.getElementById('settingsButton');
@@ -525,6 +593,9 @@
         const modalPatternSelect = document.getElementById('modalPatternSelect');
         const modalEndlessButton = document.getElementById('modalEndlessButton');
         const modalEffectButton = document.getElementById('modalEffectButton');
+        const modalPatternPreview = document.getElementById('modalPatternPreview');
+        const endlessModeDisplay = document.getElementById('endlessModeDisplay');
+        const enemyCountDisplay = document.getElementById('enemyCountDisplay');
 
         const shuffleButton = document.getElementById('shuffleButton');
         const downButton = document.getElementById('downButton');
@@ -546,6 +617,8 @@
         let phase = 0;
         let gameOver = false;
         let overallMaxLevel = 0;
+        let turnCount = 0;
+        let score = 0;
         let autoMode = false;
         let autoIntervalId;
         let gameClear = false;
@@ -602,6 +675,10 @@
             enemies = [];
             phase = 0;
             overallMaxLevel = 0;
+            turnCount = 0;
+            score = 0;
+            turnCounterSpan.textContent = turnCount;
+            scoreValueSpan.textContent = score;
             controlButton.textContent = '味方配置';
             controlButton.disabled = false;
             autoButton.disabled = false;
@@ -640,18 +717,57 @@
             tempEndlessMode = endlessMode;
             tempEffectState = effectState;
             updateModalUI();
+            updatePatternPreview(tempPattern);
             settingsModal.style.display = 'block';
         });
+        
+        function createPatternPreview() {
+            modalPatternPreview.innerHTML = '';
+            for (let i = 0; i < 7; i++) {
+                for (let j = 0; j < 7; j++) {
+                    const square = document.createElement('div');
+                    square.classList.add('preview-square');
+                    square.dataset.row = i;
+                    square.dataset.col = j;
+                    modalPatternPreview.appendChild(square);
+                }
+            }
+        }
+
+        function updatePatternPreview(patternIndex) {
+            const pattern = boardPatterns[patternIndex];
+            for (let i = 0; i < 7; i++) {
+                for (let j = 0; j < 7; j++) {
+                    const square = modalPatternPreview.querySelector(`[data-row="${i}"][data-col="${j}"]`);
+                    if (square) {
+                        square.classList.toggle('wall', pattern[i][j] === 1);
+                    }
+                }
+            }
+        }
 
         function updateModalUI() {
+            // パターン選択ボタン
             modalPatternSelect.querySelectorAll('button').forEach(btn => {
                 btn.classList.toggle('selected', parseInt(btn.dataset.pattern) - 1 === tempPattern);
             });
+            // エンドレスモード
             modalEndlessButton.classList.toggle('active', tempEndlessMode);
+            endlessModeDisplay.textContent = tempEndlessMode ? '10000' : '∞';
+
+            // 難易度
             const textMap = { 1: 'E1', 2: 'E2', 3: 'E3' };
             modalEffectButton.textContent = textMap[tempEffectState];
             modalEffectButton.className = `state-${tempEffectState}`;
             modalEffectButton.id = 'modalEffectButton';
+
+            // 敵の数インジケーター
+            enemyCountDisplay.innerHTML = '';
+            for (let i = 0; i < tempEffectState; i++) {
+                const indicator = document.createElement('div');
+                indicator.className = 'enemy-indicator';
+                enemyCountDisplay.appendChild(indicator);
+            }
         }
         
         closeModalButton.addEventListener('click', () => {
@@ -671,6 +787,7 @@
             if (button) {
                 tempPattern = parseInt(button.dataset.pattern) - 1;
                 updateModalUI();
+                updatePatternPreview(tempPattern);
             }
         });
 
@@ -828,6 +945,8 @@
                     moveAllies();
                     phase = 0;
                     controlButton.textContent = '味方配置';
+                    turnCount++;
+                    turnCounterSpan.textContent = turnCount;
                     break;
             }
             updateBoard();
@@ -877,11 +996,16 @@
             const newAllies = [];
             let evolutionsThisTurn = 0;
 
+            let scoreEvolutions = 0;
+            let sumOfDisappearedLevels = 0;
+            let sumOfNewLevels = 0;
+
             for (const key in destinations) {
                 const group = destinations[key];
                 const [destRow, destCol] = key.split('-').map(Number);
 
                 if (group.length > 1) { 
+                    scoreEvolutions++;
                     const sumOfLevels = group.reduce((sum, ally) => sum + ally.level, 0);
                     const initialMaxLevel = group.reduce((max, ally) => Math.max(max, ally.level), 0);
                     let finalLevel;
@@ -900,7 +1024,11 @@
                         evolutionsThisTurn++;
                     }
                     
-                    finalLevel = Math.min(finalLevel, 1000);
+                    const maxLevelCap = endlessMode ? 10000 : 1000;
+                    finalLevel = Math.min(finalLevel, maxLevelCap);
+                    
+                    sumOfDisappearedLevels += sumOfLevels;
+                    sumOfNewLevels += finalLevel;
 
                     newAllies.push({ row: destRow, col: destCol, level: finalLevel });
 
@@ -908,6 +1036,15 @@
                     const ally = group[0];
                     newAllies.push({ row: destRow, col: destCol, level: ally.level });
                 }
+            }
+            
+            const disappearedLevelScore = Math.floor(sumOfDisappearedLevels / 30);
+            const newLevelScore = Math.floor(sumOfNewLevels / 10);
+            const turnScoreIncrease = scoreEvolutions + disappearedLevelScore + newLevelScore;
+            
+            if (turnScoreIncrease > 0) {
+                score += turnScoreIncrease;
+                scoreValueSpan.textContent = score;
             }
 
             allies = newAllies;
@@ -971,7 +1108,13 @@
                 if (square) {
                     square.classList.add('ally');
                     if (newlyPlacedAllies.includes(ally)) square.classList.add('new-ally');
-                    square.textContent = ally.level >= 1000 ? `Lv\n1000` : `Lv${ally.level}`;
+
+                    if (ally.level >= 1000) {
+                        square.textContent = `Lv\n${ally.level}`;
+                    } else {
+                        square.textContent = `Lv${ally.level}`;
+                    }
+                    
                     if (ally.level >= 2 && ally.level === maxLevel) square.classList.add('top-right-indicator', 'max-level-ally');
                 }
             });
@@ -1215,6 +1358,7 @@
             updateCountersDisplay();
         });
 
+        createPatternPreview();
         initGame();
     </script>
 </body>
