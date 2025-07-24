@@ -103,12 +103,10 @@
             border-radius: 50%;
             background-color: yellow;
         }
-        /* ▼▼▼ CSS追加 ▼▼▼ */
         #mainButtonContainer {
             margin-bottom: 0.5rem;
             text-align: center;
         }
-        /* ▲▲▲ CSS追加 ▲▲▲ */
         #controlArea {
             display: flex;
             align-items: center;
@@ -454,6 +452,61 @@
         .arrow.left { border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-right: 12px solid palegreen; left: -8px; }
         .arrow.right { border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-left: 12px solid palegreen; right: -8px; }
 
+        #particle-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+            overflow: hidden;
+        }
+        .particle {
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            animation: particle-fade-out 0.7s ease-out forwards;
+        }
+        @keyframes particle-fade-out {
+            0% {
+                transform: translate(0, 0);
+                opacity: 0.8;
+            }
+            100% {
+                transform: translate(var(--tx), var(--ty));
+                opacity: 0;
+            }
+        }
+        
+        #scoreContainer {
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        #scoreDisplay {
+            font-size: 1rem; 
+            color: #ffeb3b; 
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        #highScoreDisplay {
+            font-size: 0.8rem;
+            color: #bdbdbd;
+            font-family: 'Press Start 2P', cursive;
+            margin-top: 4px;
+        }
+        
+        #highScoreDisplay.new-high-score {
+            animation: new-high-score-flash 0.5s 6;
+        }
+        
+        @keyframes new-high-score-flash {
+            0%, 100% { color: #ffeb3b; }
+            50% { color: #121212; }
+        }
+
+
         @media (max-width: 600px) {
             #gameBoard { grid-template-columns: repeat(7, 40px); grid-template-rows: repeat(7, 40px); }
             .square { width: 40px; height: 40px; font-size: 0.6rem; }
@@ -479,9 +532,11 @@
         <button id="resetGameButton">Reset</button>
     </div>
 
-    <div id="scoreDisplay" style="margin-bottom: 0.5rem; font-size: 1rem; color: #ffeb3b; font-family: 'Press Start 2P', cursive;">
-        Score: <span id="scoreValue">0</span>
+    <div id="scoreContainer">
+        <div id="scoreDisplay">Score: <span id="scoreValue">0</span></div>
+        <div id="highScoreDisplay">Hi-Score: <span id="highScoreValue">0</span></div>
     </div>
+
 
     <div id="gameBoard"></div>
 
@@ -498,6 +553,7 @@
         </button>
         <button id="speedButton">Speed x1</button>
     </div>
+
     <div id="specialActionsArea">
         <div class="special-action">
             <button id="shuffleButton">Shuffle</button>
@@ -571,6 +627,8 @@
             </div>
         </div>
     </div>
+    
+    <div id="particle-container"></div>
 
     <script>
         const gameBoard = document.getElementById('gameBoard');
@@ -584,6 +642,9 @@
         const overallMaxLevelSpan = document.getElementById('overallMaxLevel');
         const turnCounterSpan = document.getElementById('turnCounter');
         const scoreValueSpan = document.getElementById('scoreValue');
+        const highScoreValueSpan = document.getElementById('highScoreValue');
+        const highScoreDisplay = document.getElementById('highScoreDisplay');
+
         const resetGameButton = document.getElementById('resetGameButton');
         
         const settingsButton = document.getElementById('settingsButton');
@@ -619,6 +680,8 @@
         let overallMaxLevel = 0;
         let turnCount = 0;
         let score = 0;
+        let highScore = 0;
+
         let autoMode = false;
         let autoIntervalId;
         let gameClear = false;
@@ -655,6 +718,39 @@
             { row: 0, col: -1, dir: 'left' }, { row: 0, col: 1, dir: 'right' }
         ];
 
+        function createParticles(x, y, color) {
+            const container = document.getElementById('particle-container');
+            if (!container) return;
+
+            const particleDirections = [
+                { x: 0, y: -1 }, { x: 1, y: -1 }, { x: 1, y: 0 }, { x: 1, y: 1 },
+                { x: 0, y: 1 }, { x: -1, y: 1 }, { x: -1, y: 0 }, { x: -1, y: -1 }
+            ];
+            const distances = [30, 60]; 
+
+            distances.forEach(distance => {
+                particleDirections.forEach(dir => {
+                    const particle = document.createElement('div');
+                    particle.className = 'particle';
+                    
+                    const targetX = dir.x * distance;
+                    const targetY = dir.y * distance;
+
+                    particle.style.left = `${x}px`;
+                    particle.style.top = `${y}px`;
+                    particle.style.backgroundColor = color;
+                    particle.style.setProperty('--tx', `${targetX}px`);
+                    particle.style.setProperty('--ty', `${targetY}px`);
+
+                    container.appendChild(particle);
+
+                    particle.addEventListener('animationend', () => {
+                        particle.remove();
+                    });
+                });
+            });
+        }
+
         function updateCountersDisplay() {
             shuffleCounterSpan.textContent = `(${shuffleCounter})`;
             shuffleButton.disabled = shuffleCounter <= 0;
@@ -679,6 +775,11 @@
             score = 0;
             turnCounterSpan.textContent = turnCount;
             scoreValueSpan.textContent = score;
+
+            highScore = localStorage.getItem('evoGameHighScore') || 0;
+            highScoreValueSpan.textContent = highScore;
+
+
             controlButton.textContent = '味方配置';
             controlButton.disabled = false;
             autoButton.disabled = false;
@@ -711,6 +812,19 @@
             newlyPlacedAllies = [];
             evolutionCount = 0;
         }
+        
+        function checkHighScore() {
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('evoGameHighScore', highScore);
+                highScoreValueSpan.textContent = highScore;
+                highScoreDisplay.classList.add('new-high-score');
+                setTimeout(() => {
+                    highScoreDisplay.classList.remove('new-high-score');
+                }, 3000);
+            }
+        }
+
 
         settingsButton.addEventListener('click', () => {
             tempPattern = currentPattern;
@@ -833,7 +947,14 @@
             if (availableSquares.length > 0) {
                 const { row, col } = availableSquares[Math.floor(Math.random() * availableSquares.length)];
                 if (type === 0) {
-                    return { row, col, nextMove: null, nextDirection: null };
+                    return { 
+                        row, 
+                        col, 
+                        nextMove: null, 
+                        nextDirection: null,
+                        movementMode: 'random',
+                        moveCounter: Math.floor(Math.random() * 10) + 1
+                    };
                 }
                 return { row, col, level: initialLevel };
             }
@@ -847,27 +968,89 @@
                 const newEnemy = placeCharacter(0);
                 if (newEnemy) {
                     enemies.push(newEnemy);
-                    decideNextEnemyMove(newEnemy);
                 }
             }
+             const intendedMoves = new Set();
+             enemies.forEach(enemy => {
+                decideNextEnemyMove(enemy, enemies, intendedMoves)
+                if(enemy.nextMove) {
+                    const moveKey = `${enemy.nextMove.row}-${enemy.nextMove.col}`;
+                    intendedMoves.add(moveKey);
+                }
+            });
+
+
             const firstAlly = placeCharacter(1, 1);
             if (firstAlly) {
                 allies.push(firstAlly);
                 newlyPlacedAllies = [firstAlly];
+                setTimeout(() => {
+                    const square = document.querySelector(`[data-row="${firstAlly.row}"][data-col="${firstAlly.col}"]`);
+                     if (square) {
+                        const rect = square.getBoundingClientRect();
+                        const x = rect.left + rect.width / 2;
+                        const y = rect.top + rect.height / 2;
+                        createParticles(x, y, '#F5F5DC'); 
+                    }
+                }, 10);
             }
             updateBoard();
             updateLevelDisplay();
         }
 
-        function decideNextEnemyMove(enemy) {
-            const possibleMoves = [], possibleDirections = [];
-            for (const dir of directions) {
-                const newRow = enemy.row + dir.row, newCol = enemy.col + dir.col;
-                if (newRow >= 0 && newRow < board.length && newCol >= 0 && newCol < board[0].length && board[newRow][newCol] !== 1) {
-                    possibleMoves.push({ row: newRow, col: newCol });
-                    possibleDirections.push(dir.dir);
+        function decideNextEnemyMove(enemy, allEnemies, intendedMoves) {
+            enemy.moveCounter--;
+
+            if (enemy.moveCounter <= 0) {
+                if (enemy.movementMode === 'random') {
+                    enemy.movementMode = 'seeking';
+                    enemy.moveCounter = Math.floor(Math.random() * 5) + 1;
+                } else { 
+                    enemy.movementMode = 'random';
+                    enemy.moveCounter = Math.floor(Math.random() * 10) + 1;
                 }
             }
+
+            let possibleMoves = [];
+            let possibleDirections = [];
+            
+            if (enemy.movementMode === 'seeking' && allies.length > 0) {
+                const targetAlly = allies.reduce((max, ally) => ally.level > max.level ? ally : max, allies[0]);
+                
+                const desiredDirections = [];
+                const dy = targetAlly.row - enemy.row;
+                const dx = targetAlly.col - enemy.col;
+
+                if (dy > 0) desiredDirections.push(directions.find(d => d.dir === 'down'));
+                if (dy < 0) desiredDirections.push(directions.find(d => d.dir === 'up'));
+                if (dx > 0) desiredDirections.push(directions.find(d => d.dir === 'right'));
+                if (dx < 0) desiredDirections.push(directions.find(d => d.dir === 'left'));
+
+                for (const dir of desiredDirections) {
+                    if (!dir) continue;
+                    const newRow = enemy.row + dir.row;
+                    const newCol = enemy.col + dir.col;
+                    const moveKey = `${newRow}-${newCol}`;
+                    if (newRow >= 0 && newRow < board.length && newCol >= 0 && newCol < board[0].length && board[newRow][newCol] !== 1 && !intendedMoves.has(moveKey)) {
+                        possibleMoves.push({ row: newRow, col: newCol });
+                        possibleDirections.push(dir.dir);
+                    }
+                }
+            }
+
+            if (possibleMoves.length === 0) {
+                 const shuffledDirections = [...directions].sort(() => 0.5 - Math.random());
+                for (const dir of shuffledDirections) {
+                    const newRow = enemy.row + dir.row;
+                    const newCol = enemy.col + dir.col;
+                    const moveKey = `${newRow}-${newCol}`;
+                    if (newRow >= 0 && newRow < board.length && newCol >= 0 && newCol < board[0].length && board[newRow][newCol] !== 1 && !intendedMoves.has(moveKey)) {
+                        possibleMoves.push({ row: newRow, col: newCol });
+                        possibleDirections.push(dir.dir);
+                    }
+                }
+            }
+
             if (possibleMoves.length > 0) {
                 const randomIndex = Math.floor(Math.random() * possibleMoves.length);
                 enemy.nextMove = possibleMoves[randomIndex];
@@ -912,6 +1095,16 @@
             newlyPlacedAllies = justPlaced;
             evolutionCount = 0;
             updateLevelDisplay();
+            
+            newlyPlacedAllies.forEach(ally => {
+                const square = document.querySelector(`[data-row="${ally.row}"][data-col="${ally.col}"]`);
+                 if (square) {
+                    const rect = square.getBoundingClientRect();
+                    const x = rect.left + rect.width / 2;
+                    const y = rect.top + rect.height / 2;
+                    createParticles(x, y, '#F5F5DC'); 
+                }
+            });
         }
 
         function handleButtonClick() {
@@ -938,6 +1131,16 @@
                     break;
                 case 1:
                     moveEnemies();
+
+                    const intendedMoves = new Set();
+                    enemies.forEach(enemy => {
+                        decideNextEnemyMove(enemy, enemies, intendedMoves);
+                        if (enemy.nextMove) {
+                            const moveKey = `${enemy.nextMove.row}-${enemy.nextMove.col}`;
+                            intendedMoves.add(moveKey);
+                        }
+                    });
+
                     phase = 2;
                     controlButton.textContent = '味方移動';
                     break;
@@ -947,27 +1150,43 @@
                     controlButton.textContent = '味方配置';
                     turnCount++;
                     turnCounterSpan.textContent = turnCount;
+
                     break;
             }
             updateBoard();
         }
 
         function moveEnemies() {
+            // ★★★★★ 修正点 ★★★★★
+            // 「次の移動先を決定する」ロジックをここから削除
+            
             enemies.forEach(enemy => {
                 if (enemy.nextMove) {
                     enemy.row = enemy.nextMove.row;
                     enemy.col = enemy.nextMove.col;
                     const targetAllyIndex = allies.findIndex(ally => ally.row === enemy.row && ally.col === enemy.col);
-                    if (targetAllyIndex !== -1) allies.splice(targetAllyIndex, 1);
+                    if (targetAllyIndex !== -1) {
+                        const removedAlly = allies[targetAllyIndex];
+                        const square = document.querySelector(`[data-row="${removedAlly.row}"][data-col="${removedAlly.col}"]`);
+                        if (square) {
+                            const rect = square.getBoundingClientRect();
+                            const x = rect.left + rect.width / 2;
+                            const y = rect.top + rect.height / 2;
+                            createParticles(x, y, '#ef5350'); 
+                        }
+                        allies.splice(targetAllyIndex, 1);
+                    }
                 }
-                decideNextEnemyMove(enemy);
             });
+
             if (allies.length === 0) {
                 gameOver = true;
                 gameOverPanel.style.display = 'block';
+                checkHighScore();
             }
             updateLevelDisplay();
         }
+
 
         function moveAllies() {
             if (bonusMode) {
@@ -975,6 +1194,7 @@
             }
 
             const destinations = {};
+            const currentOverallMax = getCurrentMaxLevel();
 
             allies.forEach(ally => {
                 const possibleMoves = [{ row: ally.row, col: ally.col }];
@@ -1032,6 +1252,26 @@
 
                     newAllies.push({ row: destRow, col: destCol, level: finalLevel });
 
+                    setTimeout(() => {
+                        const square = document.querySelector(`[data-row="${destRow}"][data-col="${destCol}"]`);
+                        if(square) {
+                            const rect = square.getBoundingClientRect();
+                            const x = rect.left + rect.width / 2;
+                            const y = rect.top + rect.height / 2;
+                            let particleColor;
+                            const isMaxLevelEvo = initialMaxLevel === currentOverallMax && currentOverallMax > 1;
+
+                            if (bonusMode) {
+                                particleColor = '#FFA500'; 
+                            } else if (isMaxLevelEvo) {
+                                particleColor = '#42a5f5'; 
+                            } else {
+                                particleColor = '#80DEEA'; 
+                            }
+                            createParticles(x, y, particleColor);
+                        }
+                    }, 10);
+
                 } else { 
                     const ally = group[0];
                     newAllies.push({ row: destRow, col: destCol, level: ally.level });
@@ -1070,6 +1310,7 @@
                 autoButton.textContent = 'オート';
                 controlButton.disabled = true;
                 autoButton.disabled = true;
+                checkHighScore();
                 alert('ゲームクリア！');
             }
             updateLevelDisplay();
@@ -1133,7 +1374,6 @@
             currentMaxLevelSpan.textContent = currentMax;
             currentMaxLevelSpan.style.color = getColorForLevel(currentMax);
 
-            // === NEW Down counter logic ===
             const oldOverallMaxLevel = overallMaxLevel;
             overallMaxLevel = Math.max(overallMaxLevel, currentMax);
             
@@ -1145,7 +1385,6 @@
                 downCounter += increaseAmount;
                 updateCountersDisplay();
             }
-            // === End of new logic ===
 
             overallMaxLevelSpan.textContent = overallMaxLevel;
             overallMaxLevelSpan.style.color = getColorForLevel(overallMaxLevel);
@@ -1236,11 +1475,16 @@
             shuffleArray(availableSquares);
 
             let squareIndex = 0;
+             const intendedMoves = new Set();
             enemies.forEach(enemy => {
                 const newPos = availableSquares[squareIndex++];
                 enemy.row = newPos.row;
                 enemy.col = newPos.col;
-                decideNextEnemyMove(enemy);
+                decideNextEnemyMove(enemy, enemies, intendedMoves);
+                 if (enemy.nextMove) {
+                    const moveKey = `${enemy.nextMove.row}-${enemy.nextMove.col}`;
+                    intendedMoves.add(moveKey);
+                }
             });
 
             allies.forEach(ally => {
@@ -1344,14 +1588,14 @@
         });
 
         bonusButton.addEventListener('click', () => {
-            if (!bonusMode) { // Activate Bonus
+            if (!bonusMode) { 
                 if (bonusCounter > 0) {
                     bonusCounter--;
                     bonusMode = true;
                     bonusButton.classList.add('active');
                     bonusMoveCounter = 0;
                 }
-            } else { // Deactivate Bonus
+            } else { 
                 bonusMode = false;
                 bonusButton.classList.remove('active');
             }
