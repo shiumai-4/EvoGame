@@ -284,6 +284,19 @@
         #resetGameButton:hover {
             background-color: #322548;
         }
+        #finishButton {
+            display: none; /* 初期状態では非表示 */
+            background-color: #b71c1c;
+            color: #ffffff;
+        }
+        #finishButton:hover:not(:disabled) {
+            background-color: #c62828;
+        }
+        #finishButton:disabled {
+            background-color: #4a4a4a;
+            cursor: not-allowed;
+            color: #888888;
+        }
         #messageBox {
             height: 80px;
             background-color: #1d1c20;
@@ -528,8 +541,9 @@
 <body>
     <h1>EvoGame</h1>
     <div style="display: flex; gap: 5px; margin-bottom: 0.5rem;" class="game-controls">
-        <button id="settingsButton">設定</button>
+        <button id="settingsButton">Setting</button>
         <button id="resetGameButton">Reset</button>
+        <button id="finishButton">Finish</button>
     </div>
 
     <div id="scoreContainer">
@@ -578,7 +592,7 @@
     <div id="gameOverPanel">
         <h2>ゲームオーバー</h2>
         <p>味方が全滅しました。</p>
-        <button id="resetButton">リセット</button>
+        <button id="closeGameOverButton">閉じる</button>
     </div>
     <div id="messageBox">
         <pre>    【EvoGame】
@@ -631,22 +645,22 @@
     <div id="particle-container"></div>
 
     <script>
+        // DOM Elements
         const gameBoard = document.getElementById('gameBoard');
         const controlButton = document.getElementById('controlButton');
         const autoButton = document.getElementById('autoButton');
         const speedButton = document.getElementById('speedButton');
         const autoStopButton = document.getElementById('autoStopButton');
         const gameOverPanel = document.getElementById('gameOverPanel');
-        const resetButton = document.getElementById('resetButton');
+        const closeGameOverButton = document.getElementById('closeGameOverButton');
+        const finishButton = document.getElementById('finishButton'); 
         const currentMaxLevelSpan = document.getElementById('currentMaxLevel');
         const overallMaxLevelSpan = document.getElementById('overallMaxLevel');
         const turnCounterSpan = document.getElementById('turnCounter');
         const scoreValueSpan = document.getElementById('scoreValue');
         const highScoreValueSpan = document.getElementById('highScoreValue');
         const highScoreDisplay = document.getElementById('highScoreDisplay');
-
         const resetGameButton = document.getElementById('resetGameButton');
-        
         const settingsButton = document.getElementById('settingsButton');
         const settingsModal = document.getElementById('settingsModal');
         const closeModalButton = document.getElementById('closeModalButton');
@@ -657,36 +671,78 @@
         const modalPatternPreview = document.getElementById('modalPatternPreview');
         const endlessModeDisplay = document.getElementById('endlessModeDisplay');
         const enemyCountDisplay = document.getElementById('enemyCountDisplay');
-
         const shuffleButton = document.getElementById('shuffleButton');
         const downButton = document.getElementById('downButton');
         const bonusButton = document.getElementById('bonusButton');
         const shuffleCounterSpan = document.getElementById('shuffleCounter');
         const downCounterSpan = document.getElementById('downCounter');
         const bonusCounterSpan = document.getElementById('bonusCounter');
+        const messagePre = document.getElementById('messageBox').querySelector('pre');
+        const particleContainer = document.getElementById('particle-container');
 
-        const boardPatterns = [
-            [[1, 1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 1, 1, 1], [1, 0, 0, 0, 0, 1, 1], [1, 0, 0, 0, 0, 0, 1], [1, 1, 0, 0, 0, 0, 1], [1, 1, 1, 0, 0, 0, 1], [1, 1, 1, 1, 1, 1, 1]],
-            [[1, 1, 0, 1, 0, 1, 1], [1, 0, 0, 0, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0], [1, 0, 0, 1, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0, 1], [1, 1, 0, 1, 0, 1, 1]],
-            [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]]
+        // --- Game Constants ---
+        const GAME_SETTINGS = {
+            BOARD_SIZE: 7,
+            CLEAR_LEVEL: 10000,
+            ENDLESS_LEVEL_CAP: 10000,
+            FINISH_BUTTON_ENABLE_TURN: 1000,
+            
+            ENEMY_ADDITION_INTERVAL_TURNS: 500,
+            ENEMY_RANDOM_MOVE_MAX_DURATION: 15,
+            ENEMY_SEEKING_MOVE_MAX_DURATION: 4,
+
+            LEVEL_MILESTONE_DIVISOR: 10,
+
+            SCORE_DIVISOR_DISAPPEARED: 30,
+            SCORE_DIVISOR_NEW: 10,
+
+            BONUS_MODE_MULTIPLIER_BASE: 11,
+            BONUS_MODE_MULTIPLIER_SCALE: 0.1,
+
+            SHUFFLE_COUNTER_TRIGGER_PLACEMENTS: 15,
+            DOWN_COUNTER_TRIGGER_DIVISOR: 50,
+            BONUS_COUNTER_TRIGGER_CONSECUTIVE_EVOS: 3,
+
+            AUTO_STOP_ELIGIBLE_ALLY_LEVEL: 50,
+            PARTICLE_DISTANCES: [30, 60],
+        };
+
+        const DIRECTIONS = [
+            { row: -1, col: 0, dir: 'up' }, { row: 1, col: 0, dir: 'down' }, 
+            { row: 0, col: -1, dir: 'left' }, { row: 0, col: 1, dir: 'right' }
         ];
 
-        let currentPattern = 0;
+        const BOARD_PATTERNS = [
+            [[0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0]],
+            [[1, 1, 0, 1, 0, 1, 1], [1, 0, 0, 0, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0], [1, 0, 0, 1, 0, 0, 1], [0, 0, 0, 0, 0, 0, 0], [1, 0, 0, 0, 0, 0, 1], [1, 1, 0, 1, 0, 1, 1]],
+            [[0, 0, 0, 1, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 1, 0, 1, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0], [0, 1, 0, 0, 0, 1, 0]]
+        ];
+        
+        const AUTO_SPEEDS = [
+            { label: 'x1', interval: 1000 / 12 }, { label: 'x2', interval: 1000 / 24 }, { label: 'x4', interval: 1000 / 48 }
+        ];
+        const AUTO_STOP_MODES = ['unstop', 'around', 'adjacent'];
+
+        // --- Game State ---
         let board = [];
         let allies = [];
         let enemies = [];
         let phase = 0;
-        let gameOver = false;
-        let overallMaxLevel = 0;
         let turnCount = 0;
         let score = 0;
         let highScore = 0;
-
+        let overallMaxLevel = 0;
+        
+        let gameOver = false;
+        let gameClear = false;
+        
         let autoMode = false;
         let autoIntervalId;
-        let gameClear = false;
+        
+        let currentPattern = 0;
         let endlessMode = false;
         let effectState = 1;
+        
         let bonusMode = false;
         let bonusMoveCounter = 0;
 
@@ -696,14 +752,7 @@
         let allyPlacementCount = 0;
         let consecutiveEvolutionTurns = 0;
         
-        const autoSpeeds = [
-            { label: 'x1', interval: 1000 / 12 },
-            { label: 'x2', interval: 1000 / 24 },
-            { label: 'x4', interval: 1000 / 48 }
-        ];
         let currentSpeedIndex = 0;
-        
-        const autoStopModes = ['unstop', 'around', 'adjacent'];
         let currentAutoStopIndex = 0;
 
         let tempPattern = 0;
@@ -712,80 +761,37 @@
 
         let newlyPlacedAllies = [];
         let evolutionCount = 0;
-        
-        const directions = [
-            { row: -1, col: 0, dir: 'up' }, { row: 1, col: 0, dir: 'down' }, 
-            { row: 0, col: -1, dir: 'left' }, { row: 0, col: 1, dir: 'right' }
-        ];
 
-        function createParticles(x, y, color) {
-            const container = document.getElementById('particle-container');
-            if (!container) return;
-
-            const particleDirections = [
-                { x: 0, y: -1 }, { x: 1, y: -1 }, { x: 1, y: 0 }, { x: 1, y: 1 },
-                { x: 0, y: 1 }, { x: -1, y: 1 }, { x: -1, y: 0 }, { x: -1, y: -1 }
-            ];
-            const distances = [30, 60]; 
-
-            distances.forEach(distance => {
-                particleDirections.forEach(dir => {
-                    const particle = document.createElement('div');
-                    particle.className = 'particle';
-                    
-                    const targetX = dir.x * distance;
-                    const targetY = dir.y * distance;
-
-                    particle.style.left = `${x}px`;
-                    particle.style.top = `${y}px`;
-                    particle.style.backgroundColor = color;
-                    particle.style.setProperty('--tx', `${targetX}px`);
-                    particle.style.setProperty('--ty', `${targetY}px`);
-
-                    container.appendChild(particle);
-
-                    particle.addEventListener('animationend', () => {
-                        particle.remove();
-                    });
-                });
-            });
-        }
-
-        function updateCountersDisplay() {
-            shuffleCounterSpan.textContent = `(${shuffleCounter})`;
-            shuffleButton.disabled = shuffleCounter <= 0;
-
-            downCounterSpan.textContent = `(${downCounter})`;
-            downButton.disabled = downCounter <= 0;
-
-            bonusCounterSpan.textContent = `(${bonusCounter})`;
-            bonusButton.disabled = bonusCounter <= 0 && !bonusButton.classList.contains('active');
-        }
-
+        // --- Game Initialization ---
         function initGame() {
             gameOver = false;
             gameClear = false;
             gameOverPanel.style.display = 'none';
-            board = boardPatterns[currentPattern].map(row => [...row]);
+            board = BOARD_PATTERNS[currentPattern].map(row => [...row]);
             allies = [];
             enemies = [];
             phase = 0;
             overallMaxLevel = 0;
             turnCount = 0;
             score = 0;
-            turnCounterSpan.textContent = turnCount;
-            scoreValueSpan.textContent = score;
-
+            allyPlacementCount = 0;
+            consecutiveEvolutionTurns = 0;
+            evolutionCount = 0;
+            bonusMoveCounter = 0;
+            
             highScore = localStorage.getItem('evoGameHighScore') || 0;
-            highScoreValueSpan.textContent = highScore;
-
-
+            
+            if (endlessMode) {
+                finishButton.style.display = 'inline-block';
+                finishButton.disabled = true;
+            } else {
+                finishButton.style.display = 'none';
+            }
+            
             controlButton.textContent = '味方配置';
             controlButton.disabled = false;
             autoButton.disabled = false;
-            createBoard();
-            placeInitialCharacters();
-            updateLevelDisplay();
+            
             if (autoIntervalId) clearInterval(autoIntervalId);
             autoMode = false;
             autoButton.classList.remove('active');
@@ -793,320 +799,25 @@
             
             bonusMode = false;
             bonusButton.classList.remove('active');
-            bonusMoveCounter = 0;
+            
+            initCounters();
+            updateAllDisplays();
+            createBoard();
+            placeInitialCharacters();
+            updateBoard();
+        }
 
+        function initCounters() {
             shuffleCounter = 0;
             downCounter = 0;
             bonusCounter = 0;
-            allyPlacementCount = 0;
-            consecutiveEvolutionTurns = 0;
-            updateCountersDisplay();
-
             currentSpeedIndex = 0;
-            speedButton.textContent = `Speed ${autoSpeeds[currentSpeedIndex].label}`;
-
-            autoStopButton.classList.remove(`state-${autoStopModes[currentAutoStopIndex]}`);
             currentAutoStopIndex = 0;
-            autoStopButton.classList.add(`state-${autoStopModes[currentAutoStopIndex]}`);
-
-            newlyPlacedAllies = [];
-            evolutionCount = 0;
+            autoStopButton.className = `state-${AUTO_STOP_MODES[currentAutoStopIndex]}`;
+            speedButton.textContent = `Speed ${AUTO_SPEEDS[currentSpeedIndex].label}`;
         }
         
-        function checkHighScore() {
-            if (score > highScore) {
-                highScore = score;
-                localStorage.setItem('evoGameHighScore', highScore);
-                highScoreValueSpan.textContent = highScore;
-                highScoreDisplay.classList.add('new-high-score');
-                setTimeout(() => {
-                    highScoreDisplay.classList.remove('new-high-score');
-                }, 3000);
-            }
-        }
-
-
-        settingsButton.addEventListener('click', () => {
-            tempPattern = currentPattern;
-            tempEndlessMode = endlessMode;
-            tempEffectState = effectState;
-            updateModalUI();
-            updatePatternPreview(tempPattern);
-            settingsModal.style.display = 'block';
-        });
-        
-        function createPatternPreview() {
-            modalPatternPreview.innerHTML = '';
-            for (let i = 0; i < 7; i++) {
-                for (let j = 0; j < 7; j++) {
-                    const square = document.createElement('div');
-                    square.classList.add('preview-square');
-                    square.dataset.row = i;
-                    square.dataset.col = j;
-                    modalPatternPreview.appendChild(square);
-                }
-            }
-        }
-
-        function updatePatternPreview(patternIndex) {
-            const pattern = boardPatterns[patternIndex];
-            for (let i = 0; i < 7; i++) {
-                for (let j = 0; j < 7; j++) {
-                    const square = modalPatternPreview.querySelector(`[data-row="${i}"][data-col="${j}"]`);
-                    if (square) {
-                        square.classList.toggle('wall', pattern[i][j] === 1);
-                    }
-                }
-            }
-        }
-
-        function updateModalUI() {
-            // パターン選択ボタン
-            modalPatternSelect.querySelectorAll('button').forEach(btn => {
-                btn.classList.toggle('selected', parseInt(btn.dataset.pattern) - 1 === tempPattern);
-            });
-            // エンドレスモード
-            modalEndlessButton.classList.toggle('active', tempEndlessMode);
-            endlessModeDisplay.textContent = tempEndlessMode ? '10000' : '∞';
-
-            // 難易度
-            const textMap = { 1: 'E1', 2: 'E2', 3: 'E3' };
-            modalEffectButton.textContent = textMap[tempEffectState];
-            modalEffectButton.className = `state-${tempEffectState}`;
-            modalEffectButton.id = 'modalEffectButton';
-
-            // 敵の数インジケーター
-            enemyCountDisplay.innerHTML = '';
-            for (let i = 0; i < tempEffectState; i++) {
-                const indicator = document.createElement('div');
-                indicator.className = 'enemy-indicator';
-                enemyCountDisplay.appendChild(indicator);
-            }
-        }
-        
-        closeModalButton.addEventListener('click', () => {
-            settingsModal.style.display = 'none';
-        });
-
-        confirmSettingsButton.addEventListener('click', () => {
-            currentPattern = tempPattern;
-            endlessMode = tempEndlessMode;
-            effectState = tempEffectState;
-            initGame();
-            settingsModal.style.display = 'none';
-        });
-
-        modalPatternSelect.addEventListener('click', (event) => {
-            const button = event.target.closest('button');
-            if (button) {
-                tempPattern = parseInt(button.dataset.pattern) - 1;
-                updateModalUI();
-                updatePatternPreview(tempPattern);
-            }
-        });
-
-        modalEndlessButton.addEventListener('click', () => {
-            tempEndlessMode = !tempEndlessMode;
-            updateModalUI();
-        });
-
-        modalEffectButton.addEventListener('click', () => {
-            tempEffectState = (tempEffectState % 3) + 1;
-            updateModalUI();
-        });
-
-        resetButton.addEventListener('click', () => initGame());
-        resetGameButton.addEventListener('click', () => initGame());
-
-        function createBoard() {
-            gameBoard.innerHTML = '';
-            for (let i = 0; i < board.length; i++) {
-                for (let j = 0; j < board[i].length; j++) {
-                    const square = document.createElement('div');
-                    square.classList.add('square');
-                    square.dataset.row = i;
-                    square.dataset.col = j;
-                    gameBoard.appendChild(square);
-                }
-            }
-        }
-
-        function placeCharacter(type, initialLevel = 0) {
-            const availableSquares = [];
-            for (let i = 0; i < board.length; i++) {
-                for (let j = 0; j < board[i].length; j++) {
-                    const isWall = board[i][j] === 1;
-                    const isEnemyOccupied = enemies.some(e => e.row === i && e.col === j);
-                    const isAllyOccupied = allies.some(a => a.row === i && a.col === j);
-
-                    if (!isWall && !isEnemyOccupied && !isAllyOccupied) {
-                        availableSquares.push({ row: i, col: j });
-                    }
-                }
-            }
-            if (availableSquares.length > 0) {
-                const { row, col } = availableSquares[Math.floor(Math.random() * availableSquares.length)];
-                if (type === 0) {
-                    return { 
-                        row, 
-                        col, 
-                        nextMove: null, 
-                        nextDirection: null,
-                        movementMode: 'random',
-                        moveCounter: Math.floor(Math.random() * 10) + 1
-                    };
-                }
-                return { row, col, level: initialLevel };
-            }
-            return null;
-        }
-        
-        function placeInitialCharacters() {
-            const numEnemies = effectState;
-            enemies = [];
-            for (let i = 0; i < numEnemies; i++) {
-                const newEnemy = placeCharacter(0);
-                if (newEnemy) {
-                    enemies.push(newEnemy);
-                }
-            }
-             const intendedMoves = new Set();
-             enemies.forEach(enemy => {
-                decideNextEnemyMove(enemy, enemies, intendedMoves)
-                if(enemy.nextMove) {
-                    const moveKey = `${enemy.nextMove.row}-${enemy.nextMove.col}`;
-                    intendedMoves.add(moveKey);
-                }
-            });
-
-
-            const firstAlly = placeCharacter(1, 1);
-            if (firstAlly) {
-                allies.push(firstAlly);
-                newlyPlacedAllies = [firstAlly];
-                setTimeout(() => {
-                    const square = document.querySelector(`[data-row="${firstAlly.row}"][data-col="${firstAlly.col}"]`);
-                     if (square) {
-                        const rect = square.getBoundingClientRect();
-                        const x = rect.left + rect.width / 2;
-                        const y = rect.top + rect.height / 2;
-                        createParticles(x, y, '#F5F5DC'); 
-                    }
-                }, 10);
-            }
-            updateBoard();
-            updateLevelDisplay();
-        }
-
-        function decideNextEnemyMove(enemy, allEnemies, intendedMoves) {
-            enemy.moveCounter--;
-
-            if (enemy.moveCounter <= 0) {
-                if (enemy.movementMode === 'random') {
-                    enemy.movementMode = 'seeking';
-                    enemy.moveCounter = Math.floor(Math.random() * 5) + 1;
-                } else { 
-                    enemy.movementMode = 'random';
-                    enemy.moveCounter = Math.floor(Math.random() * 10) + 1;
-                }
-            }
-
-            let possibleMoves = [];
-            let possibleDirections = [];
-            
-            if (enemy.movementMode === 'seeking' && allies.length > 0) {
-                const targetAlly = allies.reduce((max, ally) => ally.level > max.level ? ally : max, allies[0]);
-                
-                const desiredDirections = [];
-                const dy = targetAlly.row - enemy.row;
-                const dx = targetAlly.col - enemy.col;
-
-                if (dy > 0) desiredDirections.push(directions.find(d => d.dir === 'down'));
-                if (dy < 0) desiredDirections.push(directions.find(d => d.dir === 'up'));
-                if (dx > 0) desiredDirections.push(directions.find(d => d.dir === 'right'));
-                if (dx < 0) desiredDirections.push(directions.find(d => d.dir === 'left'));
-
-                for (const dir of desiredDirections) {
-                    if (!dir) continue;
-                    const newRow = enemy.row + dir.row;
-                    const newCol = enemy.col + dir.col;
-                    const moveKey = `${newRow}-${newCol}`;
-                    if (newRow >= 0 && newRow < board.length && newCol >= 0 && newCol < board[0].length && board[newRow][newCol] !== 1 && !intendedMoves.has(moveKey)) {
-                        possibleMoves.push({ row: newRow, col: newCol });
-                        possibleDirections.push(dir.dir);
-                    }
-                }
-            }
-
-            if (possibleMoves.length === 0) {
-                 const shuffledDirections = [...directions].sort(() => 0.5 - Math.random());
-                for (const dir of shuffledDirections) {
-                    const newRow = enemy.row + dir.row;
-                    const newCol = enemy.col + dir.col;
-                    const moveKey = `${newRow}-${newCol}`;
-                    if (newRow >= 0 && newRow < board.length && newCol >= 0 && newCol < board[0].length && board[newRow][newCol] !== 1 && !intendedMoves.has(moveKey)) {
-                        possibleMoves.push({ row: newRow, col: newCol });
-                        possibleDirections.push(dir.dir);
-                    }
-                }
-            }
-
-            if (possibleMoves.length > 0) {
-                const randomIndex = Math.floor(Math.random() * possibleMoves.length);
-                enemy.nextMove = possibleMoves[randomIndex];
-                enemy.nextDirection = possibleDirections[randomIndex];
-            } else {
-                enemy.nextMove = { row: enemy.row, col: enemy.col };
-                enemy.nextDirection = null;
-            }
-        }
-        
-        function placeAlly() {
-            const emptySquares = [];
-            for (let i = 0; i < board.length; i++) {
-                for (let j = 0; j < board[i].length; j++) {
-                    if (board[i][j] === 0 && !enemies.some(e => e.row === i && e.col === j) && !allies.some(a => a.row === i && a.col === j)) {
-                        emptySquares.push({ row: i, col: j });
-                    }
-                }
-            }
-            const numAlliesToPlace = 1 + evolutionCount;
-            const actualAlliesToPlace = Math.min(numAlliesToPlace, emptySquares.length);
-            const deficit = numAlliesToPlace - actualAlliesToPlace;
-            if (deficit > 0) {
-                for (let i = 0; i < deficit; i++) {
-                    const sortedAllies = [...allies].sort((a, b) => a.level - b.level);
-                    if (sortedAllies.length > 0) {
-                        const minLevelAlly = sortedAllies[0];
-                        const originalAllyIndex = allies.findIndex(ally => ally === minLevelAlly);
-                        if (originalAllyIndex !== -1) allies[originalAllyIndex].level *= 2;
-                    } else break;
-                }
-            }
-            const justPlaced = [];
-            for (let i = 0; i < actualAlliesToPlace; i++) {
-                const randomIndex = Math.floor(Math.random() * emptySquares.length);
-                const { row, col } = emptySquares.splice(randomIndex, 1)[0];
-                const newAllyLevel = 1 + Math.floor(getCurrentMaxLevel() / 10);
-                const newAlly = { row, col, level: newAllyLevel };
-                allies.push(newAlly);
-                justPlaced.push(newAlly);
-            }
-            newlyPlacedAllies = justPlaced;
-            evolutionCount = 0;
-            updateLevelDisplay();
-            
-            newlyPlacedAllies.forEach(ally => {
-                const square = document.querySelector(`[data-row="${ally.row}"][data-col="${ally.col}"]`);
-                 if (square) {
-                    const rect = square.getBoundingClientRect();
-                    const x = rect.left + rect.width / 2;
-                    const y = rect.top + rect.height / 2;
-                    createParticles(x, y, '#F5F5DC'); 
-                }
-            });
-        }
-
+        // --- Core Game Loop ---
         function handleButtonClick() {
             if (gameOver || (gameClear && !endlessMode)) return;
 
@@ -1120,103 +831,107 @@
             switch (phase) {
                 case 0:
                     placeAlly();
-                    phase = 1;
-                    controlButton.textContent = '敵移動';
-
                     allyPlacementCount++;
-                    if (allyPlacementCount > 0 && allyPlacementCount % 30 === 0) {
+                    if (allyPlacementCount > 0 && allyPlacementCount % GAME_SETTINGS.SHUFFLE_COUNTER_TRIGGER_PLACEMENTS === 0) {
                         shuffleCounter++;
                         updateCountersDisplay();
                     }
+                    phase = 1;
+                    controlButton.textContent = '敵移動';
                     break;
                 case 1:
                     moveEnemies();
-
-                    const intendedMoves = new Set();
-                    enemies.forEach(enemy => {
-                        decideNextEnemyMove(enemy, enemies, intendedMoves);
-                        if (enemy.nextMove) {
-                            const moveKey = `${enemy.nextMove.row}-${enemy.nextMove.col}`;
-                            intendedMoves.add(moveKey);
-                        }
-                    });
-
+                    prepareNextEnemyMoves();
                     phase = 2;
                     controlButton.textContent = '味方移動';
                     break;
                 case 2:
                     moveAllies();
+                    turnCount++;
+                    checkTurnBasedEvents();
                     phase = 0;
                     controlButton.textContent = '味方配置';
-                    turnCount++;
-                    turnCounterSpan.textContent = turnCount;
-
                     break;
             }
             updateBoard();
+            updateAllDisplays();
         }
-
-        function moveEnemies() {
-            // ★★★★★ 修正点 ★★★★★
-            // 「次の移動先を決定する」ロジックをここから削除
-            
-            enemies.forEach(enemy => {
-                if (enemy.nextMove) {
-                    enemy.row = enemy.nextMove.row;
-                    enemy.col = enemy.nextMove.col;
-                    const targetAllyIndex = allies.findIndex(ally => ally.row === enemy.row && ally.col === enemy.col);
-                    if (targetAllyIndex !== -1) {
-                        const removedAlly = allies[targetAllyIndex];
-                        const square = document.querySelector(`[data-row="${removedAlly.row}"][data-col="${removedAlly.col}"]`);
-                        if (square) {
-                            const rect = square.getBoundingClientRect();
-                            const x = rect.left + rect.width / 2;
-                            const y = rect.top + rect.height / 2;
-                            createParticles(x, y, '#ef5350'); 
-                        }
-                        allies.splice(targetAllyIndex, 1);
-                    }
-                }
-            });
-
-            if (allies.length === 0) {
-                gameOver = true;
-                gameOverPanel.style.display = 'block';
-                checkHighScore();
+        
+        function checkTurnBasedEvents() {
+            if (turnCount > 0 && turnCount % GAME_SETTINGS.ENEMY_ADDITION_INTERVAL_TURNS === 0) {
+                addNewEnemyByTurn();
             }
-            updateLevelDisplay();
+            if (endlessMode && turnCount > GAME_SETTINGS.FINISH_BUTTON_ENABLE_TURN) {
+                finishButton.disabled = false;
+            }
         }
+        
+        // --- Character Actions: Ally ---
+        function placeAlly() {
+            const emptySquares = getAvailableSquares();
+            const numAlliesToPlace = 1 + evolutionCount;
+            const actualAlliesToPlace = Math.min(numAlliesToPlace, emptySquares.length);
+            const deficit = numAlliesToPlace - actualAlliesToPlace;
 
+            if (deficit > 0) {
+                const sortedAllies = [...allies].sort((a, b) => a.level - b.level);
+                for (let i = 0; i < deficit && i < sortedAllies.length; i++) {
+                    const minLevelAlly = sortedAllies[i];
+                    minLevelAlly.level *= 2;
+                }
+            }
+            
+            const justPlaced = [];
+            for (let i = 0; i < actualAlliesToPlace; i++) {
+                const randomIndex = Math.floor(Math.random() * emptySquares.length);
+                const { row, col } = emptySquares.splice(randomIndex, 1)[0];
+                const newAllyLevel = 1 + Math.floor(getCurrentMaxLevel() / GAME_SETTINGS.LEVEL_MILESTONE_DIVISOR);
+                const newAlly = { row, col, level: newAllyLevel };
+                allies.push(newAlly);
+                justPlaced.push(newAlly);
+            }
+            newlyPlacedAllies = justPlaced;
+            evolutionCount = 0;
+            
+            animatePlacement(newlyPlacedAllies, '#F5F5DC');
+        }
 
         function moveAllies() {
-            if (bonusMode) {
-                bonusMoveCounter++;
-            }
+            if (bonusMode) bonusMoveCounter++;
 
+            const destinations = calculateAllyDestinations();
+            const evolutionResult = processEvolutions(destinations);
+            
+            allies = evolutionResult.newAllies;
+            evolutionCount += evolutionResult.evolutionsThisTurn;
+            score += evolutionResult.scoreIncrease;
+            
+            updateConsecutiveEvolutionCounter(evolutionResult.evolutionsThisTurn);
+            checkGameClear();
+        }
+
+        function calculateAllyDestinations() {
             const destinations = {};
-            const currentOverallMax = getCurrentMaxLevel();
-
             allies.forEach(ally => {
                 const possibleMoves = [{ row: ally.row, col: ally.col }];
-                for (const dir of directions) {
+                for (const dir of DIRECTIONS) {
                     const newRow = ally.row + dir.row, newCol = ally.col + dir.col;
-                    if (newRow >= 0 && newRow < board.length && newCol >= 0 && newCol < board[0].length && board[newRow][newCol] !== 1 && !enemies.some(e => newRow === e.row && newCol === e.col)) {
+                    if (newRow >= 0 && newRow < GAME_SETTINGS.BOARD_SIZE && newCol >= 0 && newCol < GAME_SETTINGS.BOARD_SIZE && board[newRow][newCol] !== 1 && !enemies.some(e => newRow === e.row && newCol === e.col)) {
                         possibleMoves.push({ row: newRow, col: newCol });
                     }
                 }
                 const { row, col } = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
-                const key = `${row}-${col}`;
                 
-                if (!destinations[key]) {
-                    destinations[key] = [];
-                }
+                const key = `${row}-${col}`;
+                if (!destinations[key]) destinations[key] = [];
                 destinations[key].push(ally);
             });
+            return destinations;
+        }
 
+        function processEvolutions(destinations) {
             const newAllies = [];
             let evolutionsThisTurn = 0;
-
-            let scoreEvolutions = 0;
             let sumOfDisappearedLevels = 0;
             let sumOfNewLevels = 0;
 
@@ -1225,101 +940,209 @@
                 const [destRow, destCol] = key.split('-').map(Number);
 
                 if (group.length > 1) { 
-                    scoreEvolutions++;
                     const sumOfLevels = group.reduce((sum, ally) => sum + ally.level, 0);
                     const initialMaxLevel = group.reduce((max, ally) => Math.max(max, ally.level), 0);
                     let finalLevel;
 
                     if (bonusMode) {
-                        const numberOfAllies = group.length;
-                        const multiplier = (11 + numberOfAllies) * 0.1;
+                        const multiplier = (GAME_SETTINGS.BONUS_MODE_MULTIPLIER_BASE + group.length) * GAME_SETTINGS.BONUS_MODE_MULTIPLIER_SCALE;
                         finalLevel = Math.ceil(sumOfLevels * multiplier);
                     } else {
                         finalLevel = sumOfLevels;
                     }
 
-                    if (initialMaxLevel < 1000 && finalLevel >= 1000) {
-                        evolutionsThisTurn++;
-                    } else if (initialMaxLevel >= 1000 && group.length > 1) {
+                    if ((initialMaxLevel < GAME_SETTINGS.CLEAR_LEVEL && finalLevel >= GAME_SETTINGS.CLEAR_LEVEL) || (initialMaxLevel >= GAME_SETTINGS.CLEAR_LEVEL)) {
                         evolutionsThisTurn++;
                     }
                     
-                    const maxLevelCap = endlessMode ? 10000 : 1000;
+                    const maxLevelCap = endlessMode ? GAME_SETTINGS.ENDLESS_LEVEL_CAP : GAME_SETTINGS.CLEAR_LEVEL;
                     finalLevel = Math.min(finalLevel, maxLevelCap);
                     
                     sumOfDisappearedLevels += sumOfLevels;
                     sumOfNewLevels += finalLevel;
-
                     newAllies.push({ row: destRow, col: destCol, level: finalLevel });
-
-                    setTimeout(() => {
-                        const square = document.querySelector(`[data-row="${destRow}"][data-col="${destCol}"]`);
-                        if(square) {
-                            const rect = square.getBoundingClientRect();
-                            const x = rect.left + rect.width / 2;
-                            const y = rect.top + rect.height / 2;
-                            let particleColor;
-                            const isMaxLevelEvo = initialMaxLevel === currentOverallMax && currentOverallMax > 1;
-
-                            if (bonusMode) {
-                                particleColor = '#FFA500'; 
-                            } else if (isMaxLevelEvo) {
-                                particleColor = '#42a5f5'; 
-                            } else {
-                                particleColor = '#80DEEA'; 
-                            }
-                            createParticles(x, y, particleColor);
-                        }
-                    }, 10);
+                    
+                    const isMaxLevelEvo = initialMaxLevel === getCurrentMaxLevel() && getCurrentMaxLevel() > 1;
+                    let particleColor = bonusMode ? '#FFA500' : (isMaxLevelEvo ? '#42a5f5' : '#80DEEA');
+                    animatePlacement([{row: destRow, col: destCol}], particleColor);
 
                 } else { 
-                    const ally = group[0];
-                    newAllies.push({ row: destRow, col: destCol, level: ally.level });
+                    // 修正点: 進化しない単独の味方も、目的地(destRow, destCol)に移動させる
+                    newAllies.push({ row: destRow, col: destCol, level: group[0].level });
                 }
             }
             
-            const disappearedLevelScore = Math.floor(sumOfDisappearedLevels / 30);
-            const newLevelScore = Math.floor(sumOfNewLevels / 10);
-            const turnScoreIncrease = scoreEvolutions + disappearedLevelScore + newLevelScore;
+            const scoreIncrease = Math.floor(sumOfDisappearedLevels / GAME_SETTINGS.SCORE_DIVISOR_DISAPPEARED) + Math.floor(sumOfNewLevels / GAME_SETTINGS.SCORE_DIVISOR_NEW) + (Object.keys(destinations).length < allies.length ? 1 : 0);
             
-            if (turnScoreIncrease > 0) {
-                score += turnScoreIncrease;
-                scoreValueSpan.textContent = score;
-            }
+            return { newAllies, evolutionsThisTurn, scoreIncrease };
+        }
 
-            allies = newAllies;
-            evolutionCount += evolutionsThisTurn;
-
-            // Bonus counter logic
-            if (evolutionsThisTurn > 0) {
+        function updateConsecutiveEvolutionCounter(evolutionsThisTurn) {
+             if (evolutionsThisTurn > 0) {
                 consecutiveEvolutionTurns++;
-                if (consecutiveEvolutionTurns >= 5) {
+                if (consecutiveEvolutionTurns >= GAME_SETTINGS.BONUS_COUNTER_TRIGGER_CONSECUTIVE_EVOS) {
                     bonusCounter++;
                     consecutiveEvolutionTurns = 0;
-                    updateCountersDisplay();
                 }
             } else {
                 consecutiveEvolutionTurns = 0;
             }
+        }
+        
+        // --- Character Actions: Enemy ---
+        function moveEnemies() {
+            enemies.forEach(enemy => {
+                if (enemy.nextMove) {
+                    enemy.row = enemy.nextMove.row;
+                    enemy.col = enemy.nextMove.col;
+                    const targetAllyIndex = allies.findIndex(ally => ally.row === enemy.row && ally.col === enemy.col);
+                    if (targetAllyIndex !== -1) {
+                        const removedAlly = allies.splice(targetAllyIndex, 1)[0];
+                        animatePlacement([removedAlly], '#ef5350');
+                    }
+                }
+            });
+            checkGameOver();
+        }
+        
+        function prepareNextEnemyMoves() {
+            const intendedMoves = new Set();
+            enemies.forEach(enemy => {
+                decideNextEnemyMove(enemy, enemies, intendedMoves);
+                if (enemy.nextMove) {
+                    intendedMoves.add(`${enemy.nextMove.row}-${enemy.nextMove.col}`);
+                }
+            });
+        }
+        
+        function decideNextEnemyMove(enemy, allEnemies, intendedMoves) {
+            enemy.moveCounter--;
 
-            if (allies.some(ally => ally.level >= 1000) && !endlessMode) {
-                gameClear = true;
-                if (autoIntervalId) clearInterval(autoIntervalId);
-                autoMode = false;
-                autoButton.classList.remove('active');
-                autoButton.textContent = 'オート';
-                controlButton.disabled = true;
-                autoButton.disabled = true;
-                checkHighScore();
-                alert('ゲームクリア！');
+            if (enemy.moveCounter <= 0) {
+                enemy.movementMode = (enemy.movementMode === 'random') ? 'seeking' : 'random';
+                enemy.moveCounter = (enemy.movementMode === 'random') 
+                    ? Math.floor(Math.random() * GAME_SETTINGS.ENEMY_RANDOM_MOVE_MAX_DURATION) + 1
+                    : Math.floor(Math.random() * GAME_SETTINGS.ENEMY_SEEKING_MOVE_MAX_DURATION) + 1;
             }
+
+            let possibleMoves = [];
+            let possibleDirections = [];
+            
+            if (enemy.movementMode === 'seeking' && allies.length > 0) {
+                const targetAlly = allies.reduce((max, ally) => ally.level > max.level ? ally : max, allies[0]);
+                const desiredDirections = [];
+                const dy = targetAlly.row - enemy.row;
+                const dx = targetAlly.col - enemy.col;
+
+                if (dy > 0) desiredDirections.push(DIRECTIONS.find(d => d.dir === 'down'));
+                if (dy < 0) desiredDirections.push(DIRECTIONS.find(d => d.dir === 'up'));
+                if (dx > 0) desiredDirections.push(DIRECTIONS.find(d => d.dir === 'right'));
+                if (dx < 0) desiredDirections.push(DIRECTIONS.find(d => d.dir === 'left'));
+                
+                for (const dir of desiredDirections) {
+                    if (!dir) continue;
+                    addPossibleMove(enemy.row + dir.row, enemy.col + dir.col, dir.dir, intendedMoves, possibleMoves, possibleDirections);
+                }
+            }
+
+            if (possibleMoves.length === 0) {
+                const shuffledDirections = [...DIRECTIONS].sort(() => 0.5 - Math.random());
+                for (const dir of shuffledDirections) {
+                    addPossibleMove(enemy.row + dir.row, enemy.col + dir.col, dir.dir, intendedMoves, possibleMoves, possibleDirections);
+                }
+            }
+
+            if (possibleMoves.length > 0) {
+                const randomIndex = Math.floor(Math.random() * possibleMoves.length);
+                enemy.nextMove = possibleMoves[randomIndex];
+                enemy.nextDirection = possibleDirections[randomIndex];
+            } else {
+                enemy.nextMove = { row: enemy.row, col: enemy.col };
+                enemy.nextDirection = null;
+            }
+        }
+        
+        function addPossibleMove(row, col, dir, intendedMoves, possibleMoves, possibleDirections) {
+            const moveKey = `${row}-${col}`;
+            if (row >= 0 && row < GAME_SETTINGS.BOARD_SIZE && col >= 0 && col < GAME_SETTINGS.BOARD_SIZE && board[row][col] !== 1 && !intendedMoves.has(moveKey)) {
+                possibleMoves.push({ row, col });
+                possibleDirections.push(dir);
+            }
+        }
+
+        function addNewEnemyByTurn() {
+            const availableSquares = getAvailableSquares();
+            let newEnemyPosition;
+
+            if (availableSquares.length > 0) {
+                newEnemyPosition = availableSquares[Math.floor(Math.random() * availableSquares.length)];
+            } else if (allies.length > 0) {
+                const targetAllyIndex = Math.floor(Math.random() * allies.length);
+                const targetAlly = allies[targetAllyIndex];
+                newEnemyPosition = { row: targetAlly.row, col: targetAlly.col };
+                animatePlacement([targetAlly], '#42a5f5');
+                allies.splice(targetAllyIndex, 1);
+            } else {
+                return;
+            }
+
+            const newEnemy = { 
+                row: newEnemyPosition.row, col: newEnemyPosition.col, nextMove: null, nextDirection: null,
+                movementMode: 'random', moveCounter: Math.floor(Math.random() * GAME_SETTINGS.ENEMY_RANDOM_MOVE_MAX_DURATION) + 1
+            };
+            enemies.push(newEnemy);
+
+            const intendedMoves = new Set(enemies.map(e => e.nextMove ? `${e.nextMove.row}-${e.nextMove.col}` : '').filter(Boolean));
+            decideNextEnemyMove(newEnemy, enemies, intendedMoves);
+            
+            animatePlacement([newEnemy], '#ef5350');
+            logMessage(`Turn ${turnCount}: A new enemy has appeared!`);
+        }
+
+        // --- Game State Checks ---
+        function checkGameOver() {
+            if (allies.length === 0) {
+                endGame(false, "ゲームオーバー", "味方が全滅しました。");
+            }
+        }
+        
+        function checkGameClear() {
+            if (allies.some(ally => ally.level >= GAME_SETTINGS.CLEAR_LEVEL) && !endlessMode) {
+                endGame(true, "ゲームクリア！", `おめでとうございます！レベル${GAME_SETTINGS.CLEAR_LEVEL}に到達しました。`);
+            }
+        }
+        
+        function endGame(isClear, title, message) {
+            if (isClear) gameClear = true; else gameOver = true;
+            
+            if (autoIntervalId) clearInterval(autoIntervalId);
+            autoMode = false;
+            autoButton.classList.remove('active');
+            
+            controlButton.disabled = true;
+            autoButton.disabled = true;
+            finishButton.disabled = true;
+            [shuffleButton, downButton, bonusButton].forEach(btn => btn.disabled = true);
+            
+            checkHighScore();
+            gameOverPanel.querySelector('h2').textContent = title;
+            gameOverPanel.querySelector('p').textContent = message;
+            gameOverPanel.style.display = 'block';
+        }
+
+        // --- UI & Display Updates ---
+        function updateAllDisplays() {
             updateLevelDisplay();
+            updateCountersDisplay();
+            turnCounterSpan.textContent = turnCount;
+            scoreValueSpan.textContent = score;
+            highScoreValueSpan.textContent = highScore;
         }
 
         function updateBoard() {
-            let maxLevel = allies.reduce((max, ally) => Math.max(max, ally.level), 0);
-            for (let i = 0; i < board.length; i++) {
-                for (let j = 0; j < board[i].length; j++) {
+            const maxLevel = getCurrentMaxLevel();
+            for (let i = 0; i < GAME_SETTINGS.BOARD_SIZE; i++) {
+                for (let j = 0; j < GAME_SETTINGS.BOARD_SIZE; j++) {
                     const square = document.querySelector(`[data-row="${i}"][data-col="${j}"]`);
                     square.className = 'square';
                     square.innerHTML = '';
@@ -1329,279 +1152,337 @@
             }
             enemies.forEach(enemy => {
                 const square = document.querySelector(`[data-row="${enemy.row}"][data-col="${enemy.col}"]`);
-                if (square) {
-                    const container = document.createElement('div');
-                    container.className = 'enemy-container';
-                    const enemyDiv = document.createElement('div');
-                    enemyDiv.className = 'enemy';
-                    enemyDiv.textContent = 'E';
-                    container.appendChild(enemyDiv);
-                    if (enemy.nextDirection) {
-                        const arrow = document.createElement('div');
-                        arrow.className = `arrow ${enemy.nextDirection}`;
-                        container.appendChild(arrow);
-                    }
-                    square.appendChild(container);
+                if (!square) return;
+                const container = document.createElement('div');
+                container.className = 'enemy-container';
+                const enemyDiv = document.createElement('div');
+                enemyDiv.className = 'enemy';
+                enemyDiv.textContent = 'E';
+                container.appendChild(enemyDiv);
+                if (enemy.nextDirection) {
+                    const arrow = document.createElement('div');
+                    arrow.className = `arrow ${enemy.nextDirection}`;
+                    container.appendChild(arrow);
                 }
+                square.appendChild(container);
             });
             allies.forEach(ally => {
                 const square = document.querySelector(`[data-row="${ally.row}"][data-col="${ally.col}"]`);
-                if (square) {
-                    square.classList.add('ally');
-                    if (newlyPlacedAllies.includes(ally)) square.classList.add('new-ally');
-
-                    if (ally.level >= 1000) {
-                        square.textContent = `Lv\n${ally.level}`;
-                    } else {
-                        square.textContent = `Lv${ally.level}`;
-                    }
-                    
-                    if (ally.level >= 2 && ally.level === maxLevel) square.classList.add('top-right-indicator', 'max-level-ally');
-                }
+                if (!square) return;
+                square.classList.add('ally');
+                if (newlyPlacedAllies.includes(ally)) square.classList.add('new-ally');
+                square.textContent = ally.level >= 100 ? `Lv\n${ally.level}` : `Lv${ally.level}`;
+                if (ally.level >= 2 && ally.level === maxLevel) square.classList.add('top-right-indicator', 'max-level-ally');
             });
+            newlyPlacedAllies = [];
         }
 
         function updateLevelDisplay() {
-            const currentMax = allies.length > 0 ? allies.reduce((max, ally) => Math.max(max, ally.level), 0) : 0;
-            
+            const currentMax = getCurrentMaxLevel();
+            const oldOverallMax = overallMaxLevel;
+            overallMaxLevel = Math.max(overallMaxLevel, currentMax);
+
             const getColorForLevel = (level) => {
-                if (level >= 1000) return '#42a5f5'; // blue
-                if (level >= 500) return '#ef5350'; // red
-                if (level >= 100) return '#81c784'; // green
-                return '#ffffff'; // white
+                if (level >= GAME_SETTINGS.CLEAR_LEVEL) return '#42a5f5'; 
+                if (level >= GAME_SETTINGS.CLEAR_LEVEL / 2) return '#ef5350'; 
+                if (level >= GAME_SETTINGS.CLEAR_LEVEL / 10) return '#81c784'; 
+                return '#ffffff';
             };
 
             currentMaxLevelSpan.textContent = currentMax;
             currentMaxLevelSpan.style.color = getColorForLevel(currentMax);
-
-            const oldOverallMaxLevel = overallMaxLevel;
-            overallMaxLevel = Math.max(overallMaxLevel, currentMax);
-            
-            const previousMilestone = Math.floor(oldOverallMaxLevel / 10);
-            const currentMilestone = Math.floor(overallMaxLevel / 10);
-
-            if (currentMilestone > previousMilestone) {
-                const increaseAmount = currentMilestone - previousMilestone;
-                downCounter += increaseAmount;
-                updateCountersDisplay();
-            }
-
             overallMaxLevelSpan.textContent = overallMaxLevel;
             overallMaxLevelSpan.style.color = getColorForLevel(overallMaxLevel);
+            
+            const prevMilestone = Math.floor(oldOverallMax / GAME_SETTINGS.DOWN_COUNTER_TRIGGER_DIVISOR);
+            const currentMilestone = Math.floor(overallMaxLevel / GAME_SETTINGS.DOWN_COUNTER_TRIGGER_DIVISOR);
+
+            if (currentMilestone > prevMilestone) {
+                downCounter += currentMilestone - prevMilestone;
+            }
+        }
+        
+        function updateCountersDisplay() {
+            shuffleCounterSpan.textContent = `(${shuffleCounter})`;
+            shuffleButton.disabled = shuffleCounter <= 0;
+            downCounterSpan.textContent = `(${downCounter})`;
+            downButton.disabled = downCounter <= 0;
+            bonusCounterSpan.textContent = `(${bonusCounter})`;
+            bonusButton.disabled = bonusCounter <= 0 && !bonusButton.classList.contains('active');
+        }
+
+        function checkHighScore() {
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('evoGameHighScore', highScore);
+                highScoreDisplay.classList.add('new-high-score');
+                setTimeout(() => highScoreDisplay.classList.remove('new-high-score'), 3000);
+            }
+        }
+
+        // --- Helpers & Utilities ---
+        function getAvailableSquares() {
+            const squares = [];
+            for (let i = 0; i < GAME_SETTINGS.BOARD_SIZE; i++) {
+                for (let j = 0; j < GAME_SETTINGS.BOARD_SIZE; j++) {
+                    const isOccupied = enemies.some(e => e.row === i && e.col === j) || allies.some(a => a.row === i && a.col === j);
+                    if (board[i][j] === 0 && !isOccupied) {
+                        squares.push({ row: i, col: j });
+                    }
+                }
+            }
+            return squares;
         }
 
         function getCurrentMaxLevel() {
-            return allies.length > 0 ? allies.reduce((max, ally) => Math.max(max, ally.level), 0) : 0;
+            return allies.length > 0 ? Math.max(...allies.map(ally => ally.level)) : 0;
         }
 
-        function checkAutoStopCondition() {
-            const mode = autoStopModes[currentAutoStopIndex];
-            if (mode === 'unstop' || allies.length === 0) {
-                return false; 
+        function placeCharacter(type, initialLevel = 0) {
+            const availableSquares = getAvailableSquares();
+            if (availableSquares.length > 0) {
+                const { row, col } = availableSquares[Math.floor(Math.random() * availableSquares.length)];
+                return type === 0 ? { 
+                    row, col, nextMove: null, nextDirection: null, movementMode: 'random',
+                    moveCounter: Math.floor(Math.random() * GAME_SETTINGS.ENEMY_RANDOM_MOVE_MAX_DURATION) + 1
+                } : { row, col, level: initialLevel };
             }
-            const eligibleAllies = allies.filter(ally => ally.level >= 50);
-            if (eligibleAllies.length === 0) {
-                return false;
+            return null;
+        }
+        
+        function placeInitialCharacters() {
+            for (let i = 0; i < effectState; i++) {
+                const newEnemy = placeCharacter(0);
+                if (newEnemy) enemies.push(newEnemy);
             }
-            const maxLevelAlly = eligibleAllies.reduce((prev, current) => (prev.level > current.level) ? prev : current);
-            
-            const aroundChecks = [
-                {r: -1, c: -1}, {r: -1, c: 0}, {r: -1, c: 1},
-                {r: 0, c: -1},              {r: 0, c: 1},
-                {r: 1, c: -1}, {r: 1, c: 0}, {r: 1, c: 1}
-            ];
-            const adjacentChecks = [
-                {r: -1, c: 0}, {r: 0, c: -1}, {r: 0, c: 1}, {r: 1, c: 0}
-            ];
+            prepareNextEnemyMoves();
+            const firstAlly = placeCharacter(1, 1);
+            if (firstAlly) {
+                allies.push(firstAlly);
+                newlyPlacedAllies = [firstAlly];
+                animatePlacement(newlyPlacedAllies, '#F5F5DC');
+            }
+        }
+        
+        function logMessage(message) {
+            let currentMessages = messagePre.textContent.split('\n');
+            currentMessages.unshift(message);
+            if (currentMessages.length > 10) currentMessages.pop();
+            messagePre.textContent = currentMessages.join('\n');
+        }
 
-            const checks = (mode === 'around') ? aroundChecks : adjacentChecks;
+        // --- Animations & Effects ---
+        function createParticles(x, y, color) {
+            if (!particleContainer) return;
+            GAME_SETTINGS.PARTICLE_DISTANCES.forEach(distance => {
+                for (let i = 0; i < 8; i++) {
+                    const angle = i * Math.PI / 4;
+                    const particle = document.createElement('div');
+                    particle.className = 'particle';
+                    particle.style.left = `${x}px`;
+                    particle.style.top = `${y}px`;
+                    particle.style.backgroundColor = color;
+                    particle.style.setProperty('--tx', `${Math.cos(angle) * distance}px`);
+                    particle.style.setProperty('--ty', `${Math.sin(angle) * distance}px`);
+                    particleContainer.appendChild(particle);
+                    particle.addEventListener('animationend', () => particle.remove());
+                }
+            });
+        }
+        
+        function animatePlacement(units, color) {
+            setTimeout(() => {
+                units.forEach(unit => {
+                    const square = document.querySelector(`[data-row="${unit.row}"][data-col="${unit.col}"]`);
+                    if (square) {
+                        const rect = square.getBoundingClientRect();
+                        createParticles(rect.left + rect.width / 2, rect.top + rect.height / 2, color);
+                    }
+                });
+            }, 10);
+        }
 
-            for (const check of checks) {
-                const checkRow = maxLevelAlly.row + check.r;
-                const checkCol = maxLevelAlly.col + check.c;
-
-                if (enemies.some(e => e.row === checkRow && e.col === checkCol)) {
-                    return true;
+        // --- Board & Special Actions ---
+        function createBoard() {
+            gameBoard.innerHTML = '';
+            for (let i = 0; i < GAME_SETTINGS.BOARD_SIZE; i++) {
+                for (let j = 0; j < GAME_SETTINGS.BOARD_SIZE; j++) {
+                    const square = document.createElement('div');
+                    square.classList.add('square');
+                    square.dataset.row = i;
+                    square.dataset.col = j;
+                    gameBoard.appendChild(square);
                 }
             }
+        }
+        
+        function shufflePositions() {
+            if (gameOver || gameClear) return;
+            const allUnits = [...allies, ...enemies];
+            const allPositions = [];
+            for (let i = 0; i < GAME_SETTINGS.BOARD_SIZE; i++) {
+                for (let j = 0; j < GAME_SETTINGS.BOARD_SIZE; j++) {
+                    if (board[i][j] !== 1) allPositions.push({ row: i, col: j });
+                }
+            }
+            if (allUnits.length > allPositions.length) return;
 
-            return false;
+            for (let i = allPositions.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [allPositions[i], allPositions[j]] = [allPositions[j], allPositions[i]];
+            }
+            
+            allUnits.forEach((unit, index) => {
+                unit.row = allPositions[index].row;
+                unit.col = allPositions[index].col;
+            });
+
+            prepareNextEnemyMoves();
+            updateBoard();
         }
 
+        function consolidateAlliesVertically() {
+            if (gameOver || (gameClear && !endlessMode)) return;
+
+            const newAllies = [];
+            for (let j = 0; j < GAME_SETTINGS.BOARD_SIZE; j++) {
+                const alliesInCol = allies.filter(a => a.col === j);
+                if (alliesInCol.length > 0 && !enemies.some(e => e.col === j)) {
+                    const totalLevel = alliesInCol.reduce((sum, ally) => sum + ally.level, 0);
+                    let targetRow = -1;
+                    for (let i = GAME_SETTINGS.BOARD_SIZE - 1; i >= 0; i--) {
+                        if (board[i][j] !== 1) {
+                            targetRow = i;
+                            break;
+                        }
+                    }
+                    if (targetRow !== -1) newAllies.push({ row: targetRow, col: j, level: totalLevel });
+                }
+            }
+            allies = newAllies;
+            updateBoard();
+            updateLevelDisplay();
+        }
+        
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            controlButton.addEventListener('click', handleButtonClick);
+            autoButton.addEventListener('click', toggleAutoMode);
+            speedButton.addEventListener('click', () => {
+                currentSpeedIndex = (currentSpeedIndex + 1) % AUTO_SPEEDS.length;
+                speedButton.textContent = `Speed ${AUTO_SPEEDS[currentSpeedIndex].label}`;
+                if (autoMode) toggleAutoMode(), toggleAutoMode();
+            });
+            autoStopButton.addEventListener('click', () => {
+                currentAutoStopIndex = (currentAutoStopIndex + 1) % AUTO_STOP_MODES.length;
+                autoStopButton.className = `state-${AUTO_STOP_MODES[currentAutoStopIndex]}`;
+            });
+            shuffleButton.addEventListener('click', () => {
+                if (shuffleCounter > 0) { shuffleCounter--; updateCountersDisplay(); shufflePositions(); }
+            });
+            downButton.addEventListener('click', () => {
+                if (downCounter > 0) { downCounter--; updateCountersDisplay(); consolidateAlliesVertically(); }
+            });
+            bonusButton.addEventListener('click', () => {
+                if (!bonusMode) { 
+                    if (bonusCounter > 0) { bonusCounter--; bonusMode = true; bonusButton.classList.add('active'); bonusMoveCounter = 0; }
+                } else { bonusMode = false; bonusButton.classList.remove('active'); }
+                updateCountersDisplay();
+            });
+            finishButton.addEventListener('click', () => {
+                if(gameOver || gameClear) return;
+                endGame(true, "ゲーム終了", `ターン ${turnCount} で終了しました。お疲れ様でした！`);
+            });
+            resetGameButton.addEventListener('click', initGame);
+            closeGameOverButton.addEventListener('click', () => { gameOverPanel.style.display = 'none'; });
+            settingsButton.addEventListener('click', () => {
+                tempPattern = currentPattern; tempEndlessMode = endlessMode; tempEffectState = effectState;
+                updateModalUI(); updatePatternPreview(tempPattern); settingsModal.style.display = 'block';
+            });
+            closeModalButton.addEventListener('click', () => { settingsModal.style.display = 'none'; });
+            confirmSettingsButton.addEventListener('click', () => {
+                currentPattern = tempPattern; endlessMode = tempEndlessMode; effectState = tempEffectState;
+                initGame(); settingsModal.style.display = 'none';
+            });
+            modalPatternSelect.addEventListener('click', (event) => {
+                const button = event.target.closest('button');
+                if (button) { tempPattern = parseInt(button.dataset.pattern) - 1; updateModalUI(); updatePatternPreview(tempPattern); }
+            });
+            modalEndlessButton.addEventListener('click', () => { tempEndlessMode = !tempEndlessMode; updateModalUI(); });
+            modalEffectButton.addEventListener('click', () => { tempEffectState = (tempEffectState % 3) + 1; updateModalUI(); });
+        }
+        
         function toggleAutoMode() {
             autoMode = !autoMode;
             autoButton.classList.toggle('active', autoMode);
             if (autoMode) {
                 const autoPlay = () => {
                     if (checkAutoStopCondition()) {
-                        clearInterval(autoIntervalId);
-                        autoMode = false;
-                        autoButton.classList.remove('active');
-                        return;
+                        toggleAutoMode(); return;
                     }
                     handleButtonClick();
                 };
-                autoIntervalId = setInterval(autoPlay, autoSpeeds[currentSpeedIndex].interval);
+                autoIntervalId = setInterval(autoPlay, AUTO_SPEEDS[currentSpeedIndex].interval);
             } else {
                 clearInterval(autoIntervalId);
             }
         }
         
-        function shuffleArray(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
+        function checkAutoStopCondition() {
+            const mode = AUTO_STOP_MODES[currentAutoStopIndex];
+            if (mode === 'unstop' || allies.length === 0) return false;
+            const eligibleAllies = allies.filter(ally => ally.level >= GAME_SETTINGS.AUTO_STOP_ELIGIBLE_ALLY_LEVEL);
+            if (eligibleAllies.length === 0) return false;
+
+            const maxLevelAlly = eligibleAllies.reduce((prev, current) => (prev.level > current.level) ? prev : current);
+            const checks = (mode === 'around') 
+                ? [{r: -1, c: -1}, {r: -1, c: 0}, {r: -1, c: 1}, {r: 0, c: -1}, {r: 0, c: 1}, {r: 1, c: -1}, {r: 1, c: 0}, {r: 1, c: 1}]
+                : [{r: -1, c: 0}, {r: 0, c: -1}, {r: 0, c: 1}, {r: 1, c: 0}];
+
+            return checks.some(check => enemies.some(e => e.row === maxLevelAlly.row + check.r && e.col === maxLevelAlly.col + check.c));
         }
-
-        function shufflePositions() {
-            if (gameOver || gameClear) return;
-
-            const availableSquares = [];
-            for (let i = 0; i < board.length; i++) {
-                for (let j = 0; j < board[i].length; j++) {
-                    if (board[i][j] !== 1) {
-                        availableSquares.push({ row: i, col: j });
-                    }
-                }
-            }
-
-            const totalUnits = allies.length + enemies.length;
-            if (totalUnits > availableSquares.length) {
-                console.error("シャッフルするための十分なマスがありません。");
-                return;
-            }
-
-            shuffleArray(availableSquares);
-
-            let squareIndex = 0;
-             const intendedMoves = new Set();
-            enemies.forEach(enemy => {
-                const newPos = availableSquares[squareIndex++];
-                enemy.row = newPos.row;
-                enemy.col = newPos.col;
-                decideNextEnemyMove(enemy, enemies, intendedMoves);
-                 if (enemy.nextMove) {
-                    const moveKey = `${enemy.nextMove.row}-${enemy.nextMove.col}`;
-                    intendedMoves.add(moveKey);
-                }
-            });
-
-            allies.forEach(ally => {
-                const newPos = availableSquares[squareIndex++];
-                ally.row = newPos.row;
-                ally.col = newPos.col;
-            });
-
-            newlyPlacedAllies = [];
-            updateBoard();
-            updateLevelDisplay();
-        }
-
-        function consolidateAlliesVertically() {
-            if (gameOver || (gameClear && !endlessMode)) return;
-
-            const numCols = board[0].length;
-            const columnData = Array(numCols).fill(null).map(() => ({
-                totalLevel: 0,
-                hasEnemy: false
-            }));
-
-            for (let j = 0; j < numCols; j++) {
-                if (enemies.some(e => e.col === j)) {
-                    columnData[j].hasEnemy = true;
-                }
-                const alliesInCol = allies.filter(a => a.col === j);
-                if (alliesInCol.length > 0) {
-                    columnData[j].totalLevel = alliesInCol.reduce((sum, ally) => sum + ally.level, 0);
-                }
-            }
-
-            const newAllies = [];
-            for (let j = 0; j < numCols; j++) {
-                if (columnData[j].totalLevel > 0 && !columnData[j].hasEnemy) {
-                    let targetRow = -1;
-                    for (let i = board.length - 1; i >= 0; i--) {
-                        if (board[i][j] !== 1) {
-                            targetRow = i;
-                            break;
-                        }
-                    }
-                    if (targetRow !== -1) {
-                        newAllies.push({
-                            row: targetRow,
-                            col: j,
-                            level: columnData[j].totalLevel
-                        });
-                    }
-                }
-            }
-
-            allies = newAllies;
-            newlyPlacedAllies = [];
-
-            updateBoard();
-            updateLevelDisplay();
-        }
-
-        controlButton.addEventListener('click', handleButtonClick);
-        autoButton.addEventListener('click', toggleAutoMode);
         
-        speedButton.addEventListener('click', () => {
-            currentSpeedIndex = (currentSpeedIndex + 1) % autoSpeeds.length;
-            speedButton.textContent = `Speed ${autoSpeeds[currentSpeedIndex].label}`;
-            if (autoMode) {
-                clearInterval(autoIntervalId);
-                const autoPlay = () => {
-                    if (checkAutoStopCondition()) {
-                        clearInterval(autoIntervalId);
-                        autoMode = false;
-                        autoButton.classList.remove('active');
-                        return;
-                    }
-                    handleButtonClick();
-                };
-                autoIntervalId = setInterval(autoPlay, autoSpeeds[currentSpeedIndex].interval);
-            }
-        });
-
-        autoStopButton.addEventListener('click', () => {
-            autoStopButton.classList.remove(`state-${autoStopModes[currentAutoStopIndex]}`);
-            currentAutoStopIndex = (currentAutoStopIndex + 1) % autoStopModes.length;
-            autoStopButton.classList.add(`state-${autoStopModes[currentAutoStopIndex]}`);
-        });
-
-        shuffleButton.addEventListener('click', () => {
-            if (shuffleCounter > 0) {
-                shuffleCounter--;
-                updateCountersDisplay();
-                shufflePositions();
-            }
-        });
-
-        downButton.addEventListener('click', () => {
-            if (downCounter > 0) {
-                downCounter--;
-                updateCountersDisplay();
-                consolidateAlliesVertically();
-            }
-        });
-
-        bonusButton.addEventListener('click', () => {
-            if (!bonusMode) { 
-                if (bonusCounter > 0) {
-                    bonusCounter--;
-                    bonusMode = true;
-                    bonusButton.classList.add('active');
-                    bonusMoveCounter = 0;
+        // --- Settings Modal ---
+        function createPatternPreview() {
+            modalPatternPreview.innerHTML = '';
+            for (let i = 0; i < GAME_SETTINGS.BOARD_SIZE; i++) {
+                for (let j = 0; j < GAME_SETTINGS.BOARD_SIZE; j++) {
+                    const square = document.createElement('div');
+                    square.className = 'preview-square';
+                    square.dataset.row = i; square.dataset.col = j;
+                    modalPatternPreview.appendChild(square);
                 }
-            } else { 
-                bonusMode = false;
-                bonusButton.classList.remove('active');
             }
-            updateCountersDisplay();
-        });
+        }
 
+        function updatePatternPreview(patternIndex) {
+            const pattern = BOARD_PATTERNS[patternIndex];
+            for (let i = 0; i < GAME_SETTINGS.BOARD_SIZE; i++) {
+                for (let j = 0; j < GAME_SETTINGS.BOARD_SIZE; j++) {
+                    const square = modalPatternPreview.querySelector(`[data-row="${i}"][data-col="${j}"]`);
+                    if (square) square.classList.toggle('wall', pattern[i][j] === 1);
+                }
+            }
+        }
+
+        function updateModalUI() {
+            modalPatternSelect.querySelectorAll('button').forEach(btn => btn.classList.toggle('selected', parseInt(btn.dataset.pattern) - 1 === tempPattern));
+            modalEndlessButton.classList.toggle('active', tempEndlessMode);
+            endlessModeDisplay.textContent = tempEndlessMode ? 'infinity' : String(GAME_SETTINGS.ENDLESS_LEVEL_CAP);
+            const textMap = { 1: 'E1', 2: 'E2', 3: 'E3' };
+            modalEffectButton.textContent = textMap[tempEffectState];
+            modalEffectButton.className = `state-${tempEffectState}`;
+            modalEffectButton.id = 'modalEffectButton';
+            enemyCountDisplay.innerHTML = '';
+            for (let i = 0; i < tempEffectState; i++) {
+                const indicator = document.createElement('div');
+                indicator.className = 'enemy-indicator';
+                enemyCountDisplay.appendChild(indicator);
+            }
+        }
+        
+        // --- Entry Point ---
+        setupEventListeners();
         createPatternPreview();
         initGame();
     </script>
