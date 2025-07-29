@@ -104,7 +104,7 @@
             background-color: yellow;
         }
         #mainButtonContainer {
-            margin-bottom: 0.5rem;
+            margin-bottom: 1.2rem;
             text-align: center;
         }
         #controlArea {
@@ -112,7 +112,7 @@
             align-items: center;
             justify-content: center;
             gap: 1rem;
-            margin-bottom: 0.5rem;
+            margin-bottom: 1.2rem;
         }
         #levelDisplay {
             display: flex;
@@ -121,7 +121,7 @@
             font-size: 0.8rem;
             color: #ffffff;
             text-align: center;
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
         }
         #levelDisplay .level-value {
             font-weight: bold;
@@ -184,11 +184,11 @@
             width: 8px;
             height: 8px;
         }
-        #autoStopButton.state-unstop .stop-cell { background-color: white; }
+        #autoStopButton.state-unstop .stop-cell { background-color: rgb(178, 178, 178); }
         #autoStopButton.state-unstop .stop-cell:nth-child(5) { background-color: #42a5f5; }
         #autoStopButton.state-around .stop-cell { background-color: #ef5350; }
         #autoStopButton.state-around .stop-cell:nth-child(5) { background-color: #42a5f5; }
-        #autoStopButton.state-adjacent .stop-cell { background-color: white; }
+        #autoStopButton.state-adjacent .stop-cell { background-color: rgb(178, 178, 178); }
         #autoStopButton.state-adjacent .stop-cell:nth-child(2),
         #autoStopButton.state-adjacent .stop-cell:nth-child(4),
         #autoStopButton.state-adjacent .stop-cell:nth-child(6),
@@ -198,7 +198,7 @@
         #specialActionsArea {
             display: flex;
             gap: 20px;
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
             align-items: center;
         }
         .special-action {
@@ -297,20 +297,25 @@
             cursor: not-allowed;
             color: #888888;
         }
-        #messageBox {
-            height: 80px;
+
+        #infoMessageBox,#messageBox {
             background-color: #1d1c20;
             border: 1px solid #424242;
             border-radius: 5px;
-            padding: 0px;
+            padding: 3px;
             margin-bottom: 0.5rem;
             font-size: 0.8rem;
-            color: #cccccc;
             overflow-y: auto;
             text-align: left;
             box-sizing: border-box;
             line-height: 1.2;
             font-family: monospace;
+            width: 394px; /* ゲームボードの幅に合わせる */
+            height: 90px;  /* 高さを調整 */
+            color: #cccccc;
+        }
+        #infoMessageBox {
+            border-color: #42a5f5; /* 枠線を青色に変更 */
         }
         .modal {
             display: none; 
@@ -526,7 +531,7 @@
             h1 { font-size: 1.2rem; }
             #controlButton { font-size: 0.8rem; padding: 0.5rem; width: 10rem; }
             #gameOverPanel { padding: 0.5rem; font-size: 0.8rem; }
-            #levelDisplay { font-size: 0.6rem; flex-direction: column; gap: 5px; }
+            #levelDisplay { font-size: 0.6rem; gap: 5px; }
             #autoButton, #speedButton, #autoStopButton { font-size: 0.7rem; padding: 0.5rem; }
             .game-controls button { font-size: 0.7rem; padding: 0.5rem; }
             #specialActionsArea { gap: 10px; }
@@ -535,6 +540,10 @@
                 padding: 0.4rem 0.8rem;
             }
             .counter-span { font-size: 0.7rem; }
+            #infoMessageBox,
+            #messageBox {
+                width: 324px; /* モバイル表示でのゲームボード幅 */
+            }
         }
     </style>
 </head>
@@ -589,19 +598,28 @@
         <div>Turn: <span id="turnCounter" class="level-value">0</span></div>
     </div>
 
+    <div id="infoMessageBox">
+        <pre>【獲得ログ】</pre>
+    </div>
     <div id="gameOverPanel">
         <h2>ゲームオーバー</h2>
         <p>味方が全滅しました。</p>
         <button id="closeGameOverButton">閉じる</button>
     </div>
     <div id="messageBox">
-        <pre>    【EvoGame】
-    1, 味方を追加
-    2, 敵が移動し、味方を消去
-    3, 味方が移動
-    4, 同じマスに移動したら、Lvが合算して進化       
-    5, Lvが高いと、追加の味方のLvが上がる
-    6, Lv.1000に到達するとクリア</pre>
+        <pre>【目的】
+味方を合体させ、Lv.10,000に進化させよう！
+
+【基本の流れ】
+1. [味方配置]：新しい味方を盤上に追加します。
+   - 味方の最大Lvが高いほど強い味方が現れます。
+2. [敵移動]：敵が味方を追いかけ、捕まると消滅します。
+3. [味方移動]：味方が移動し、合体するとLvが合算！
+
+【その他のルール】
+・味方が全滅するとゲームオーバーです。
+・500ターンごとに新しい敵が出現します。
+・条件を満たすと画面下の特殊能力が使えます。</pre>
     </div>
 
     <div id="settingsModal" class="modal">
@@ -678,6 +696,8 @@
         const downCounterSpan = document.getElementById('downCounter');
         const bonusCounterSpan = document.getElementById('bonusCounter');
         const messagePre = document.getElementById('messageBox').querySelector('pre');
+        const infoMessageBox = document.getElementById('infoMessageBox');
+        const infoMessagePre = infoMessageBox.querySelector('pre');
         const particleContainer = document.getElementById('particle-container');
 
         // --- Game Constants ---
@@ -700,8 +720,7 @@
             BONUS_MODE_MULTIPLIER_SCALE: 0.1,
 
             SHUFFLE_COUNTER_TRIGGER_PLACEMENTS: 15,
-            DOWN_COUNTER_TRIGGER_DIVISOR: 50,
-            BONUS_COUNTER_TRIGGER_CONSECUTIVE_EVOS: 3,
+            BONUS_COUNTER_TRIGGER_DEFEATS: 10,
 
             AUTO_STOP_ELIGIBLE_ALLY_LEVEL: 50,
             PARTICLE_DISTANCES: [30, 60],
@@ -750,7 +769,8 @@
         let downCounter = 0;
         let bonusCounter = 0;
         let allyPlacementCount = 0;
-        let consecutiveEvolutionTurns = 0;
+        let allyDefeatCount = 0;
+        let downTriggerLevel = 10;
         
         let currentSpeedIndex = 0;
         let currentAutoStopIndex = 0;
@@ -775,9 +795,12 @@
             turnCount = 0;
             score = 0;
             allyPlacementCount = 0;
-            consecutiveEvolutionTurns = 0;
+            allyDefeatCount = 0;
             evolutionCount = 0;
             bonusMoveCounter = 0;
+            downTriggerLevel = 10;
+            
+            if(infoMessagePre) infoMessagePre.textContent = '【獲得ログ】';
             
             highScore = localStorage.getItem('evoGameHighScore') || 0;
             
@@ -834,7 +857,7 @@
                     allyPlacementCount++;
                     if (allyPlacementCount > 0 && allyPlacementCount % GAME_SETTINGS.SHUFFLE_COUNTER_TRIGGER_PLACEMENTS === 0) {
                         shuffleCounter++;
-                        updateCountersDisplay();
+                        logInfoMessage(`Shuffle +1 (味方${GAME_SETTINGS.SHUFFLE_COUNTER_TRIGGER_PLACEMENTS}体配置)`);
                     }
                     phase = 1;
                     controlButton.textContent = '敵移動';
@@ -906,7 +929,6 @@
             evolutionCount += evolutionResult.evolutionsThisTurn;
             score += evolutionResult.scoreIncrease;
             
-            updateConsecutiveEvolutionCounter(evolutionResult.evolutionsThisTurn);
             checkGameClear();
         }
 
@@ -967,7 +989,6 @@
                     animatePlacement([{row: destRow, col: destCol}], particleColor);
 
                 } else { 
-                    // 修正点: 進化しない単独の味方も、目的地(destRow, destCol)に移動させる
                     newAllies.push({ row: destRow, col: destCol, level: group[0].level });
                 }
             }
@@ -975,18 +996,6 @@
             const scoreIncrease = Math.floor(sumOfDisappearedLevels / GAME_SETTINGS.SCORE_DIVISOR_DISAPPEARED) + Math.floor(sumOfNewLevels / GAME_SETTINGS.SCORE_DIVISOR_NEW) + (Object.keys(destinations).length < allies.length ? 1 : 0);
             
             return { newAllies, evolutionsThisTurn, scoreIncrease };
-        }
-
-        function updateConsecutiveEvolutionCounter(evolutionsThisTurn) {
-             if (evolutionsThisTurn > 0) {
-                consecutiveEvolutionTurns++;
-                if (consecutiveEvolutionTurns >= GAME_SETTINGS.BONUS_COUNTER_TRIGGER_CONSECUTIVE_EVOS) {
-                    bonusCounter++;
-                    consecutiveEvolutionTurns = 0;
-                }
-            } else {
-                consecutiveEvolutionTurns = 0;
-            }
         }
         
         // --- Character Actions: Enemy ---
@@ -999,6 +1008,12 @@
                     if (targetAllyIndex !== -1) {
                         const removedAlly = allies.splice(targetAllyIndex, 1)[0];
                         animatePlacement([removedAlly], '#ef5350');
+                        
+                        allyDefeatCount++;
+                        if (allyDefeatCount > 0 && allyDefeatCount % GAME_SETTINGS.BONUS_COUNTER_TRIGGER_DEFEATS === 0) {
+                            bonusCounter++;
+                            logInfoMessage(`Bonus +1 (味方${GAME_SETTINGS.BONUS_COUNTER_TRIGGER_DEFEATS}体消滅)`);
+                        }
                     }
                 }
             });
@@ -1086,7 +1101,7 @@
                 return;
             }
 
-            const newEnemy = { 
+            const newEnemy = {
                 row: newEnemyPosition.row, col: newEnemyPosition.col, nextMove: null, nextDirection: null,
                 movementMode: 'random', moveCounter: Math.floor(Math.random() * GAME_SETTINGS.ENEMY_RANDOM_MOVE_MAX_DURATION) + 1
             };
@@ -1094,9 +1109,10 @@
 
             const intendedMoves = new Set(enemies.map(e => e.nextMove ? `${e.nextMove.row}-${e.nextMove.col}` : '').filter(Boolean));
             decideNextEnemyMove(newEnemy, enemies, intendedMoves);
-            
+
             animatePlacement([newEnemy], '#ef5350');
-            logMessage(`Turn ${turnCount}: A new enemy has appeared!`);
+            // ▼▼▼ この行を logInfoMessage に変更 ▼▼▼
+            logInfoMessage(`Turn ${turnCount}: A new enemy has appeared!`);
         }
 
         // --- Game State Checks ---
@@ -1194,11 +1210,10 @@
             overallMaxLevelSpan.textContent = overallMaxLevel;
             overallMaxLevelSpan.style.color = getColorForLevel(overallMaxLevel);
             
-            const prevMilestone = Math.floor(oldOverallMax / GAME_SETTINGS.DOWN_COUNTER_TRIGGER_DIVISOR);
-            const currentMilestone = Math.floor(overallMaxLevel / GAME_SETTINGS.DOWN_COUNTER_TRIGGER_DIVISOR);
-
-            if (currentMilestone > prevMilestone) {
-                downCounter += currentMilestone - prevMilestone;
+            while (overallMaxLevel >= downTriggerLevel) {
+                downCounter++;
+                logInfoMessage(`Down +1 (Lv${downTriggerLevel}達成)`);
+                downTriggerLevel *= 2;
             }
         }
         
@@ -1269,6 +1284,17 @@
             currentMessages.unshift(message);
             if (currentMessages.length > 10) currentMessages.pop();
             messagePre.textContent = currentMessages.join('\n');
+        }
+
+        function logInfoMessage(message) {
+            if (!infoMessagePre) return;
+            let currentMessages = infoMessagePre.textContent.split('\n');
+            const title = currentMessages.shift();
+            currentMessages = currentMessages.filter(msg => msg.trim() !== '');
+            currentMessages.unshift(`> ${message}`);
+            // ▼▼▼ 行数制限を5から4に変更 ▼▼▼
+            if (currentMessages.length > 4) currentMessages.pop();
+            infoMessagePre.textContent = [title, ...currentMessages].join('\n');
         }
 
         // --- Animations & Effects ---
@@ -1393,7 +1419,10 @@
                 if(gameOver || gameClear) return;
                 endGame(true, "ゲーム終了", `ターン ${turnCount} で終了しました。お疲れ様でした！`);
             });
-            resetGameButton.addEventListener('click', initGame);
+            resetGameButton.addEventListener('click', () => {
+                logInfoMessage("ゲームをリセットしました。");
+                initGame();
+            });
             closeGameOverButton.addEventListener('click', () => { gameOverPanel.style.display = 'none'; });
             settingsButton.addEventListener('click', () => {
                 tempPattern = currentPattern; tempEndlessMode = endlessMode; tempEffectState = effectState;
