@@ -523,6 +523,37 @@
             0%, 100% { color: #ffeb3b; }
             50% { color: #121212; }
         }
+        .main-footer {
+        width: 100%;
+        max-width: 600px;
+        text-align: center;
+        color: #374151;
+        margin-top: 32px;
+        margin-bottom: 14px;
+        margin-left: auto;  /* 追加 */
+        margin-right: auto; /* 追加 */
+        }
+        .main-footer a {
+            color: #d8971d;
+            text-decoration: none;
+            transition: color 0.2s ease-in-out;
+            font-size: 0.9rem;
+        }
+        .main-footer a:hover {
+            color: #8a580c;
+            text-decoration: underline;
+        }
+        .footer-links {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.25rem;
+            margin-bottom: 0.2rem;
+        }
+        .footer-copyright {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
 
 
         @media (max-width: 600px) {
@@ -661,6 +692,18 @@
     </div>
     
     <div id="particle-container"></div>
+
+    <footer class="main-footer">
+        <div class="footer-links">
+            <a href="https://example.com/portfolio" target="_blank" rel="noopener noreferrer">作品集</a>
+            <a href="https://x.com/your_x_handle" target="_blank" rel="noopener noreferrer">X</a>
+            <a href="https://example.com/privacy-policy" target="_blank" rel="noopener noreferrer">プライバシーポリシー</a>
+            <a href="https://example.com/contact" target="_blank" rel="noopener noreferrer">お問い合わせ</a>
+        </div>
+        <div class="footer-copyright">
+            ©︎2025 shiumai_4. All rights reserved.
+        </div>
+    </footer>
 
     <script>
         // DOM Elements
