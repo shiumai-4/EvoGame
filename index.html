@@ -317,6 +317,11 @@
         #infoMessageBox {
             border-color: #42a5f5; /* 枠線を青色に変更 */
         }
+        #messageBox pre {
+            white-space: pre-wrap; /* テキストの折り返しを許可 */
+            word-wrap: break-word; /* 長い単語でも強制的に折り返す */
+            overflow-x: hidden;    /* 横スクロールを禁止 */
+        }
         .modal {
             display: none; 
             position: fixed; 
@@ -339,12 +344,17 @@
             border-radius: 10px;
             display: flex;
             flex-direction: column;
-            gap: 1.5rem;
+            gap: 0.5rem;
         }
         .modal-content h2 {
             margin-top: 0;
+            margin-bottom: 0.2rem;
             color: #81c784;
             text-align: center;
+        }
+        .modal-content h3 {
+            margin-top: 0.3rem; /* 上の余白を調整 */
+            margin-bottom: 0.3rem; /* 下の余白を調整 */
         }
         #modalPatternSelect {
             display: flex;
@@ -489,7 +499,7 @@
         @keyframes particle-fade-out {
             0% {
                 transform: translate(0, 0);
-                opacity: 0.8;
+                opacity: 0.9;
             }
             100% {
                 transform: translate(var(--tx), var(--ty));
@@ -656,7 +666,6 @@
     <div id="settingsModal" class="modal">
         <div class="modal-content">
             <h2>ゲーム設定</h2>
-            
             <div>
                 <h3>ステージ選択</h3>
                 <div id="modalPatternSelect">
@@ -756,7 +765,7 @@
 
             LEVEL_MILESTONE_DIVISOR: 10,
 
-            SCORE_DIVISOR_DISAPPEARED: 30,
+            SCORE_DIVISOR_DISAPPEARED: 3,// 30->3
             SCORE_DIVISOR_NEW: 10,
 
             BONUS_MODE_MULTIPLIER_BASE: 11,
@@ -1036,7 +1045,11 @@
                 }
             }
             
-            const scoreIncrease = Math.floor(sumOfDisappearedLevels / GAME_SETTINGS.SCORE_DIVISOR_DISAPPEARED) + Math.floor(sumOfNewLevels / GAME_SETTINGS.SCORE_DIVISOR_NEW) + (Object.keys(destinations).length < allies.length ? 1 : 0);
+            // ★★★ 修正ポイント ★★★
+            // 基本スコアを計算
+            const baseScore = Math.floor(sumOfDisappearedLevels / GAME_SETTINGS.SCORE_DIVISOR_DISAPPEARED) + Math.floor(sumOfNewLevels / GAME_SETTINGS.SCORE_DIVISOR_NEW) + (Object.keys(destinations).length < allies.length ? 1 : 0);
+            // 基本スコアに敵の数を乗算（最低1倍）
+            const scoreIncrease = baseScore * Math.max(1, enemies.length);
             
             return { newAllies, evolutionsThisTurn, scoreIncrease };
         }
@@ -1413,24 +1426,61 @@
         function consolidateAlliesVertically() {
             if (gameOver || (gameClear && !endlessMode)) return;
 
-            const newAllies = [];
+            const newConsolidatedAllies = [];
+            const unaffectedAllies = [];
+            let sumOfDisappearedLevels = 0;
+            let sumOfNewLevels = 0;
+            let evolutionsThisAction = 0;
+
             for (let j = 0; j < GAME_SETTINGS.BOARD_SIZE; j++) {
                 const alliesInCol = allies.filter(a => a.col === j);
-                if (alliesInCol.length > 0 && !enemies.some(e => e.col === j)) {
-                    const totalLevel = alliesInCol.reduce((sum, ally) => sum + ally.level, 0);
-                    let targetRow = -1;
-                    for (let i = GAME_SETTINGS.BOARD_SIZE - 1; i >= 0; i--) {
-                        if (board[i][j] !== 1) {
-                            targetRow = i;
-                            break;
-                        }
+                const isEnemyInCol = enemies.some(e => e.col === j);
+                if (isEnemyInCol) {
+                    continue;
+                }
+                if (alliesInCol.length <= 1) {
+                    unaffectedAllies.push(...alliesInCol);
+                    continue;
+                }
+                const sumOfLevels = alliesInCol.reduce((sum, ally) => sum + ally.level, 0);
+                const initialMaxLevel = alliesInCol.reduce((max, ally) => Math.max(max, ally.level), 0);
+                let finalLevel = sumOfLevels;
+                if ((initialMaxLevel < GAME_SETTINGS.CLEAR_LEVEL && finalLevel >= GAME_SETTINGS.CLEAR_LEVEL) || (initialMaxLevel >= GAME_SETTINGS.CLEAR_LEVEL)) {
+                    evolutionsThisAction++;
+                }
+                const maxLevelCap = endlessMode ? GAME_SETTINGS.ENDLESS_LEVEL_CAP : GAME_SETTINGS.CLEAR_LEVEL;
+                finalLevel = Math.min(finalLevel, maxLevelCap);
+                sumOfDisappearedLevels += sumOfLevels;
+                sumOfNewLevels += finalLevel;
+                let targetRow = -1;
+                for (let i = GAME_SETTINGS.BOARD_SIZE - 1; i >= 0; i--) {
+                    if (board[i][j] !== 1) {
+                        targetRow = i;
+                        break;
                     }
-                    if (targetRow !== -1) newAllies.push({ row: targetRow, col: j, level: totalLevel });
+                }
+                if (targetRow !== -1) {
+                    const newAlly = { row: targetRow, col: j, level: finalLevel };
+                    newConsolidatedAllies.push(newAlly);
+                    const isMaxLevelEvo = initialMaxLevel === getCurrentMaxLevel() && getCurrentMaxLevel() > 1;
+                    const particleColor = isMaxLevelEvo ? '#42a5f5' : '#80DEEA';
+                    animatePlacement([{row: targetRow, col: j}], particleColor);
                 }
             }
-            allies = newAllies;
+            
+            // ★★★ 修正ポイント ★★★
+            const didMerge = newConsolidatedAllies.length > 0;
+            // 基本スコアを計算
+            const baseScore = Math.floor(sumOfDisappearedLevels / GAME_SETTINGS.SCORE_DIVISOR_DISAPPEARED) + Math.floor(sumOfNewLevels / GAME_SETTINGS.SCORE_DIVISOR_NEW) + (didMerge ? 1 : 0);
+            // 基本スコアに敵の数を乗算（最低1倍）
+            const scoreIncrease = baseScore * Math.max(1, enemies.length);
+            score += scoreIncrease;
+            
+            evolutionCount += evolutionsThisAction;
+            allies = [...unaffectedAllies, ...newConsolidatedAllies];
             updateBoard();
-            updateLevelDisplay();
+            updateAllDisplays();
+            checkGameClear();
         }
         
         // --- Event Listeners ---
